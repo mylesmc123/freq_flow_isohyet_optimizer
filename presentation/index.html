@@ -1,0 +1,771 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Frequency-Flow Isohyet Optimizer &mdash; Methodology</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --accent: #144870;
+    --accent-soft: #4a86b3;
+    --rule: #d4dae2;
+    --bg: #fafbfc;
+    --text: #1f2937;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue",
+                 Helvetica, Arial, sans-serif;
+    color: var(--text);
+    background: var(--bg);
+    line-height: 1.55;
+  }
+  main {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 32px 28px 96px;
+  }
+  h1 {
+    margin: 0 0 4px;
+    font-size: 28px;
+    color: var(--accent);
+    border-bottom: 2px solid var(--accent);
+    padding-bottom: 6px;
+  }
+  h1 + .subtitle {
+    margin: 0 0 32px;
+    color: #5b6574;
+    font-size: 15px;
+  }
+  h2 {
+    margin: 48px 0 12px;
+    font-size: 21px;
+    color: var(--accent);
+    border-left: 4px solid var(--accent);
+    padding-left: 10px;
+  }
+  h3 {
+    margin: 24px 0 8px;
+    font-size: 16px;
+    color: #2b3543;
+  }
+  p { margin: 8px 0; }
+  ul { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code {
+    background: #eef1f5;
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 13px;
+  }
+  .map {
+    height: 480px;
+    margin: 16px 0;
+    border: 1px solid #b3bcc7;
+    border-radius: 4px;
+  }
+  .chart-wrap {
+    position: relative;
+    height: 360px;
+    margin: 16px 0;
+  }
+  .legend {
+    background: white;
+    padding: 8px 12px;
+    line-height: 1.4;
+    border: 1px solid #999;
+    border-radius: 4px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.18);
+    font-size: 12px;
+  }
+  .legend .row { display: flex; align-items: center; margin: 2px 0; }
+  .legend .swatch {
+    display: inline-block;
+    width: 22px; height: 14px;
+    margin-right: 6px;
+    border: 1px solid #6b6b6b;
+  }
+  .legend .title {
+    font-weight: 600;
+    margin-bottom: 4px;
+    font-size: 12px;
+  }
+  table.kv {
+    border-collapse: collapse;
+    margin: 12px 0;
+    font-size: 14px;
+  }
+  table.kv th, table.kv td {
+    border: 1px solid #c0c8d2;
+    padding: 6px 12px;
+    text-align: left;
+  }
+  table.kv th {
+    background: #eef3f8;
+    font-weight: 600;
+    color: var(--accent);
+  }
+  .pill {
+    display: inline-block;
+    background: var(--accent);
+    color: white;
+    padding: 1px 9px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.2px;
+  }
+  .orient-grid {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 8px;
+    margin: 14px 0;
+  }
+  .orient-grid figure {
+    margin: 0;
+    text-align: center;
+  }
+  .orient-grid img {
+    width: 100%;
+    height: auto;
+    display: block;
+    border: 1px solid #c8cdd5;
+    border-radius: 3px;
+    background: #fff;
+  }
+  .orient-grid figcaption {
+    font-size: 12px;
+    color: #4b5563;
+    margin-top: 2px;
+  }
+  @media (max-width: 720px) {
+    .orient-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  }
+  .comparison-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+    margin: 14px 0;
+  }
+  .comparison-grid figure { margin: 0; text-align: center; }
+  .comparison-grid img {
+    width: 100%; height: auto; display: block;
+    border: 1px solid #c8cdd5; border-radius: 3px; background: #fff;
+  }
+  .comparison-grid figcaption {
+    font-size: 13px; color: #2b3543; margin-top: 4px; line-height: 1.3;
+  }
+  .legend-dot {
+    display: inline-block; width: 10px; height: 10px; border-radius: 50%;
+    vertical-align: middle; margin-right: 5px;
+  }
+  @media (max-width: 720px) {
+    .comparison-grid { grid-template-columns: 1fr; }
+  }
+  .callout {
+    background: #f1f5fa;
+    border-left: 3px solid var(--accent-soft);
+    padding: 10px 14px;
+    margin: 14px 0;
+    font-size: 14px;
+  }
+  .callout strong { color: var(--accent); }
+  .footer {
+    margin-top: 64px;
+    padding-top: 16px;
+    border-top: 1px solid var(--rule);
+    color: #6b7280;
+    font-size: 13px;
+  }
+</style>
+</head>
+<body>
+<main>
+
+<h1>Frequency-Flow Isohyet Optimizer</h1>
+<div class="subtitle">A hybrid Atlas&nbsp;14 / HMR&nbsp;52 design-storm method for iterating peak target flow at a watershed outfall.</div>
+
+<!-- ============================================================ -->
+<h2>1. Problem Statement</h2>
+
+<p>
+FHWA <strong>HEC-19</strong> (<em>Hydrology for Highway Engineers</em>) calls for an
+<strong>areal reduction</strong> of frequency precipitation depths for watersheds large enough to be impacted
+by spatial variability. The Depth Area Reduction Factor curves recommended in HEC-19 are only for watersheds up to 400&nbsp;mi&sup2;, but the target basin for this project is about 2,839&nbsp;mi&sup2; &mdash;
+NOAA <strong>Atlas&nbsp;14</strong> grids supply point/grid-cell precipitation frequency
+estimates &mdash; if a uniform Atlas&nbsp;14 depth is applied across an 800&ndash;3000&nbsp;mi&sup2;
+basin, every point is implicitly experiencing its full point-frequency depth
+simultaneously, which is physically unrealistic and inflates simulated flows.
+</p>
+
+<p>
+For a <strong>joint-probability</strong> design where source flows entering an HEC-HMS
+model are paired across upstream gages, a frequency-consistent local rainfall input is
+needed to drive the routing through the basin. To stay frequency-consistent without
+overstating the storm, this project combines two well-established sources:
+</p>
+
+<ul>
+  <li><strong>Atlas&nbsp;14 supplies the <em>magnitude</em></strong>: the precipitation
+      depth at the storm centroid is sampled directly from the gridded Atlas&nbsp;14 raster
+      for the desired frequency (50, 100, or 500-yr) and 24-hr duration.</li>
+  <li><strong>HMR&nbsp;52 supplies the <em>spatial decay</em></strong>: the depth at every
+      other point in the storm is set by a 2.5:1 elliptical pattern with a depth-area-
+      duration (DAD) curve derived from HMR&nbsp;52, sourced from HEC-MetVue.</li>
+</ul>
+
+<p>
+Because peak flow at the watershed outfall depends on <em>where</em> the storm is centered
+and <em>how</em> the elliptical major axis is oriented relative to the basin's hydrologic
+geometry, a single placement is insufficient. We <strong>iterate over candidate storm
+centroids and orientations</strong> at each frequency, run the HEC-HMS model for each
+combination, and report the scenario that produces the highest peak flow at the target
+junction.
+</p>
+
+<div class="callout">
+  <strong>Outcome:</strong> a frequency-faithful, areally-reduced design event whose
+  centroid placement and orientation have been verified to maximize peak flow at the
+  target outfall &mdash; suitable as a hydrologic boundary condition for downstream
+  hydraulic and floodplain analysis.
+</div>
+
+<!-- ============================================================ -->
+<h2>2. Basin and Atlas&nbsp;14 Coverage</h2>
+
+<p>
+The basin (delineated as 19 HEC-HMS subbasins) sits near the
+Tennessee&ndash;Missouri&ndash;Arkansas tri-state border, totaling about 2,839&nbsp;mi&sup2;.
+The map below shows the subbasin layer over the gridded
+<strong>Atlas&nbsp;14, 100-yr, 24-hr</strong> raster, with an OSM basemap for context.
+Atlas&nbsp;14 is supplied as ESRI ASCII grids in NAD83 geographic coordinates, with depth
+encoded as integer thousandths of an inch.
+</p>
+
+<div id="map1" class="map"></div>
+
+<p>
+The raster's spatial variation across this basin is small but real
+(<span id="atlas14-range">[range loading]</span>) &mdash; the centroid magnitude depends
+on where in the basin the storm is placed, which is one of the dimensions our iteration
+will sweep.
+</p>
+
+<!-- ============================================================ -->
+<h2>3. The HMR&nbsp;52 Depth-Area-Duration Curve</h2>
+
+<p>
+The DAD curve sets the <em>shape</em> of the storm: a single anchor point near the storm
+centroid (1.0) decays with enclosed area outward. This particular curve was extracted from
+<strong>HEC-MetVue</strong>'s built-in HMR&nbsp;52 dataset for 24-hr durations, then
+extended out to 20,000&nbsp;mi&sup2; so storm sizes that envelop the full basin at any
+orientation can be modeled without clamping.
+</p>
+
+<div class="chart-wrap"><canvas id="dadChart"></canvas></div>
+
+<p>
+The depth at any cell inside the elliptical storm is then:
+</p>
+<pre style="background:#eef1f5; padding:10px; border-radius:4px; font-size:13px;">
+depth(cell) = centroid_depth &times; dad_interp(enclosed_area_through_cell)
+</pre>
+<p>
+where <code>centroid_depth</code> is the Atlas&nbsp;14 grid value at the storm centroid
+and <code>enclosed_area_through_cell</code> is the area of the similar (concentric)
+ellipse passing through that cell (which depends only on the cell's position relative
+to the centroid, not on the storm's outer size).
+</p>
+
+<!-- ============================================================ -->
+<h2>4. Storm Ellipse Spatial Pattern</h2>
+
+<p>
+Applying the DAD curve to a 20,000&nbsp;mi&sup2; storm centered on the basin centroid
+produces the nested isohyetal pattern below. Both maps use viridis, but with different
+stretches tuned to their data ranges &mdash; Atlas&nbsp;14 on a tight 6.5&ndash;9.5&nbsp;in
+window (its values cluster in a narrow band), the storm on 0&ndash;10&nbsp;in (its rings
+span a much wider range). The black dot marks the storm centroid; depth at that point
+equals the Atlas&nbsp;14 sample (8.40&nbsp;in for the 100-yr&nbsp;24-hr at this centroid).
+</p>
+
+<div id="map2" class="map"></div>
+
+<div class="callout">
+  Notice how the basin's mean depth ends up <em>less</em> than the centroid Atlas&nbsp;14
+  value &mdash; that's the spatial decay (and therefore the areal reduction) doing its
+  work. The reduction is a property of the DAD pattern, not a separate adjustment factor.
+</div>
+
+<!-- ============================================================ -->
+<h2>5. Subbasin-Average Hyetographs</h2>
+
+<p>
+The storm-total depth raster gives one scalar per subbasin (the area-weighted mean of
+depth-field cells inside that subbasin polygon). Multiplying these per-subbasin totals
+by an SCS&nbsp;<strong>Type&nbsp;II 24-hr</strong> cumulative temporal distribution
+(taken from the HydroCAD distribution table) and differencing yields per-timestep
+incremental precipitation for each subbasin:
+</p>
+
+<div class="chart-wrap"><canvas id="hyetoChart"></canvas></div>
+
+<p>
+Each line above is one subbasin's hyetograph at 15-minute resolution. The Type&nbsp;II
+profile peaks sharply around hour 12; vertical separation between subbasins reflects
+their position relative to the storm centroid (subbasins near the center receive more
+total depth, so their entire profiles ride higher).
+</p>
+
+<p>
+This DataFrame becomes a multi-record DSS file (one time-series record per subbasin)
+that overwrites the precipitation references in an existing HEC-HMS Met Model of type
+<em>Specified Hyetograph</em>. HMS is then invoked via subprocess; the resulting flows
+DSS is read back to extract the target junction's hydrograph, which is exported as CSV
+for downstream comparison across all scenarios.
+</p>
+
+<h3>Why this matters: location &amp; orientation drive peak flow</h3>
+<p>
+Three illustrative scenarios &mdash; same 100-yr&nbsp;24-hr Atlas&nbsp;14 magnitude, same
+20,000&nbsp;mi&sup2; storm size, same Type&nbsp;II temporal distribution &mdash; but with
+the storm centered on three different subbasins and rotated to three different
+orientations. The result at the watershed outfall changes substantially.
+</p>
+
+<div class="comparison-grid">
+  <figure><img src="example/data/comparison_storm_1.png" alt="Scenario 1"><figcaption><span class="legend-dot" style="background:#3949ab"></span>SW outlet centroid, 200&deg;</figcaption></figure>
+  <figure><img src="example/data/comparison_storm_2.png" alt="Scenario 2"><figcaption><span class="legend-dot" style="background:#d81b60"></span>E flank centroid, 240&deg;</figcaption></figure>
+  <figure><img src="example/data/comparison_storm_3.png" alt="Scenario 3"><figcaption><span class="legend-dot" style="background:#43a047"></span>N headwaters centroid, 280&deg;</figcaption></figure>
+</div>
+
+<div class="chart-wrap"><canvas id="hydroCompareChart"></canvas></div>
+
+<div class="callout">
+  <strong>Illustrative only:</strong> the hydrographs above are produced by convolving each
+  scenario's basin-mean hyetograph with a synthetic triangular unit hydrograph (rise
+  8&nbsp;hr, base 30&nbsp;hr) and scaled to a plausible peak. They will be replaced with
+  actual HEC-HMS results once the iteration loop is wired up. The
+  <em>relative differences</em> between scenarios are real (driven by basin-mean depth
+  variation across the storm placements); the absolute magnitudes are placeholders.
+</div>
+
+<!-- ============================================================ -->
+<h2>6. Iteration Plan</h2>
+
+<p>
+For each of the 19 subbasins, the elliptical storm will be placed at the subbasin's
+centroid to perform an HEC-HMS run. For each centroid, we will also perform 7
+orientations of the storm.
+</p>
+
+<div id="map3" class="map"></div>
+
+<h3>Storm orientations</h3>
+<p>
+At each subbasin centroid, the storm is rotated through the 7 orientations below
+(20&deg; steps spanning the HMR&nbsp;52 Table&nbsp;9 Central Plains range of
+160&ndash;285&deg;). The storm extent and basin context are shown for the basin-centroid
+case; the same orientations are applied at every subbasin centroid in the iteration.
+</p>
+
+<div class="orient-grid">
+  <figure><img src="example/data/orientations/orient_160.png" alt="160 degrees"><figcaption>160&deg;</figcaption></figure>
+  <figure><img src="example/data/orientations/orient_180.png" alt="180 degrees"><figcaption>180&deg;</figcaption></figure>
+  <figure><img src="example/data/orientations/orient_200.png" alt="200 degrees"><figcaption>200&deg;</figcaption></figure>
+  <figure><img src="example/data/orientations/orient_220.png" alt="220 degrees"><figcaption>220&deg;</figcaption></figure>
+  <figure><img src="example/data/orientations/orient_240.png" alt="240 degrees"><figcaption>240&deg;</figcaption></figure>
+  <figure><img src="example/data/orientations/orient_260.png" alt="260 degrees"><figcaption>260&deg;</figcaption></figure>
+  <figure><img src="example/data/orientations/orient_280.png" alt="280 degrees"><figcaption>280&deg;</figcaption></figure>
+</div>
+
+<h3>Full sweep</h3>
+
+<table class="kv">
+  <thead>
+    <tr><th>Dimension</th><th>Values</th><th>Count</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>Storm area</strong></td>
+      <td>20,000&nbsp;mi&sup2; (Ensure full basin coverage at any orientation)</td>
+      <td>1</td>
+    </tr>
+    <tr>
+      <td><strong>Storm centroid</strong></td>
+      <td>One per subbasin (representative point inside the polygon)</td>
+      <td>19</td>
+    </tr>
+    <tr>
+      <td><strong>Orientation</strong></td>
+      <td>160&deg;, 180&deg;, 200&deg;, 220&deg;, 240&deg;, 260&deg;, 280&deg;
+          (20&deg; steps over HMR&nbsp;52 Table&nbsp;9 Central Plains range 160&ndash;285&deg;)</td>
+      <td>7</td>
+    </tr>
+    <tr>
+      <td><strong>Frequency</strong></td>
+      <td>50, 100, 500-yr</td>
+      <td>3</td>
+    </tr>
+    <tr>
+      <td colspan="2" style="text-align:right;"><strong>Total scenarios</strong></td>
+      <td><span class="pill">399</span></td>
+    </tr>
+  </tbody>
+</table>
+
+<p>
+At an estimated 60&nbsp;s per HEC-HMS simulation, the full 399-scenario sweep runs in
+roughly <strong>7 hours</strong> on a single machine. Once the peak-producing
+scenario is identified, a gridded DSS file will be created for that frequency event to use as the precipitation data in the production HEC-HMS model.
+</p>
+
+<div class="footer">
+  <strong>Pipeline modules:</strong>
+  <code>basin.py</code> (load, sample Atlas 14, subbasin centroids, zonal means) &middot;
+  <code>hmr52.py</code> (DAD curve, ellipse polygons, depth field, nested rings) &middot;
+  <code>temporal.py</code> (SCS distribution loader, hyetograph builder) &middot;
+  <code>isohyet_maker.py</code> (orchestration: <code>run_scenario()</code> &rarr; storm GeoJSON +
+  per-subbasin hyetograph DataFrame).
+  Working CRS: EPSG:5070 (USA Contiguous Albers Equal Area). Iteration loop and
+  <code>pydsstools</code>-based DSS read/write to follow.
+</div>
+
+</main>
+
+<script>
+// ============================================================
+// Helpers
+// ============================================================
+const DATA = "example/data/";
+
+async function loadJSON(path) {
+  const r = await fetch(path);
+  return r.json();
+}
+
+function depthToColor(depth, cmap) {
+  if (depth == null || isNaN(depth)) return "#cccccc";
+  const t = Math.max(0, Math.min(1, (depth - cmap.vmin) / (cmap.vmax - cmap.vmin)));
+  const idx = Math.round(t * (cmap.stops.length - 1));
+  return cmap.stops[idx].color;
+}
+
+function buildLegend(cmap, title, ticks) {
+  const el = document.createElement("div");
+  el.className = "legend";
+  let html = `<div class="title">${title}</div>`;
+  for (const t of ticks) {
+    html += `<div class="row">
+      <span class="swatch" style="background:${depthToColor(t, cmap)}"></span>
+      <span>${t.toFixed(1)} in</span>
+    </div>`;
+  }
+  el.innerHTML = html;
+  return el;
+}
+
+// ============================================================
+// Main
+// ============================================================
+(async () => {
+  const [cmap, atlasCmap, atlasMeta, dadCurve, hyeto, subs, storm, centroid, subCentroids, hydroCompare] = await Promise.all([
+    loadJSON(DATA + "colormap.json"),
+    loadJSON(DATA + "atlas14_cmap.json"),
+    loadJSON(DATA + "atlas14_100yr_24hr.json"),
+    loadJSON(DATA + "dad_curve.json"),
+    loadJSON(DATA + "hyetograph.json"),
+    loadJSON(DATA + "subbasins.geojson"),
+    loadJSON(DATA + "storm_ellipse.geojson"),
+    loadJSON(DATA + "storm_centroid.geojson"),
+    loadJSON(DATA + "subbasin_centroids.geojson"),
+    loadJSON(DATA + "comparison_hydrographs.json"),
+  ]);
+
+  document.getElementById("atlas14-range").textContent =
+    `${atlasMeta.data_min_in.toFixed(2)}–${atlasMeta.data_max_in.toFixed(2)} in across the basin`;
+
+  // ----------------------------------------------------------
+  // Map 1: Subbasins + Atlas 14 raster + OSM
+  // ----------------------------------------------------------
+  const map1 = L.map("map1", { scrollWheelZoom: false });
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 18,
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+  }).addTo(map1);
+
+  const [s, w, n, e] = atlasMeta.bounds_latlon;
+  const atlasOverlay = L.imageOverlay(DATA + "atlas14_100yr_24hr.png", [[s, w], [n, e]], {
+    opacity: 0.85,
+    interactive: false,
+  }).addTo(map1);
+
+  const subStyle = {
+    color: "#1f2937",
+    weight: 1,
+    fillColor: "#9aa6b4",
+    fillOpacity: 0.10,
+  };
+  const subsLayer = L.geoJSON(subs, {
+    style: subStyle,
+    onEachFeature: (f, layer) => {
+      const name = f.properties.name || "subbasin";
+      layer.bindTooltip(name, { sticky: true });
+    },
+  }).addTo(map1);
+
+  map1.fitBounds(subsLayer.getBounds(), { padding: [20, 20] });
+
+  const legend1 = L.control({ position: "bottomright" });
+  legend1.onAdd = () => buildLegend(atlasCmap, "Atlas 14, 100-yr, 24-hr (in)", [6.5, 7.5, 8.0, 8.5, 9.0, 9.5]);
+  legend1.addTo(map1);
+
+  // ----------------------------------------------------------
+  // DAD curve chart
+  // ----------------------------------------------------------
+  new Chart(document.getElementById("dadChart"), {
+    type: "line",
+    data: {
+      labels: dadCurve.areas_sqmi,
+      datasets: [{
+        label: "HMR 52 (24-hr) depth ratio",
+        data: dadCurve.ratios,
+        borderColor: "#144870",
+        backgroundColor: "rgba(20, 72, 112, 0.12)",
+        pointBackgroundColor: "#144870",
+        pointRadius: 3,
+        tension: 0.0,
+        fill: true,
+      }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        title: { display: true, text: "DAD curve (depth ratio vs. enclosed area)" },
+        legend: { display: false },
+      },
+      scales: {
+        x: {
+          type: "logarithmic",
+          title: { display: true, text: "Enclosed area (sq mi)" },
+          ticks: {
+            callback: (v) => Number(v.toString()).toLocaleString(),
+          },
+        },
+        y: {
+          min: 0, max: 1,
+          title: { display: true, text: "Depth ratio (centroid = 1.0)" },
+        },
+      },
+    },
+  });
+
+  // ----------------------------------------------------------
+  // Map 2: Subbasins + storm ellipse + centroid
+  // ----------------------------------------------------------
+  const map2 = L.map("map2", { scrollWheelZoom: false });
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 18,
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+  }).addTo(map2);
+
+  // Storm rings first (under subbasin outlines)
+  // Sort by area_sqmi descending so smaller bands paint over larger; annular
+  // bands don't actually overlap, but explicit ordering keeps render predictable.
+  const stormSorted = {
+    type: "FeatureCollection",
+    features: storm.features.slice().sort(
+      (a, b) => b.properties.area_sqmi - a.properties.area_sqmi
+    ),
+  };
+
+  L.geoJSON(stormSorted, {
+    style: (f) => ({
+      color: "#1f2937",
+      weight: 0.6,
+      fillColor: depthToColor(f.properties.depth_in, cmap),
+      fillOpacity: 0.85,
+    }),
+    onEachFeature: (f, layer) => {
+      const p = f.properties;
+      layer.bindTooltip(
+        `${p.depth_in.toFixed(2)} in — band [${p.inner_area_sqmi ?? 0}, ${p.area_sqmi}] sq mi`,
+        { sticky: true }
+      );
+    },
+  }).addTo(map2);
+
+  L.geoJSON(centroid, {
+    pointToLayer: (f, latlng) => L.circleMarker(latlng, {
+      radius: 5,
+      fillColor: "#000",
+      color: "#fff",
+      weight: 1.5,
+      fillOpacity: 1,
+    }).bindTooltip(
+      `Storm centroid — Atlas 14: ${f.properties.centroid_depth_in.toFixed(2)} in`,
+      { sticky: true }
+    ),
+  }).addTo(map2);
+
+  // Subbasins drawn LAST so their red outlines sit on top of the storm rings.
+  // No fill so the storm colors below remain visible inside each subbasin.
+  L.geoJSON(subs, {
+    style: {
+      color: "#dc2626",
+      weight: 1.6,
+      fillOpacity: 0.0,
+    },
+    onEachFeature: (f, layer) => {
+      const name = f.properties.name || "subbasin";
+      layer.bindTooltip(name, { sticky: true });
+    },
+  }).addTo(map2);
+
+  // Fit to the storm extent (bigger than basin) but with a basin-friendly padding
+  const stormGroup = L.geoJSON(storm);
+  map2.fitBounds(stormGroup.getBounds(), { padding: [10, 10] });
+
+  const legend2 = L.control({ position: "bottomright" });
+  legend2.onAdd = () => buildLegend(cmap, "Storm depth (in)", [2, 3, 4, 5, 6, 7, 8]);
+  legend2.addTo(map2);
+
+  // ----------------------------------------------------------
+  // Comparison: 3 outflow hydrographs (illustrative)
+  // ----------------------------------------------------------
+  new Chart(document.getElementById("hydroCompareChart"), {
+    type: "line",
+    data: {
+      labels: hydroCompare.time_hours,
+      datasets: hydroCompare.scenarios.map((s) => ({
+        label: `${s.label} — peak ${Math.round(s.peak_cfs).toLocaleString()} cfs (basin-mean ${s.basin_mean_in.toFixed(2)} in)`,
+        data: s.Q_cfs,
+        borderColor: s.color,
+        backgroundColor: "transparent",
+        borderWidth: 2.0,
+        pointRadius: 0,
+        tension: 0.25,
+      })),
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        title: { display: true, text: "Outfall hydrograph — three scenarios (illustrative)" },
+        legend: { display: true, position: "bottom", labels: { boxWidth: 14, font: { size: 11 } } },
+        tooltip: { mode: "nearest", intersect: false },
+      },
+      scales: {
+        x: {
+          title: { display: true, text: "Time (hours)" },
+          ticks: {
+            maxTicksLimit: 14,
+            callback: function (val) {
+              const lbl = this.getLabelForValue(val);
+              return parseFloat(lbl).toFixed(0);
+            },
+          },
+        },
+        y: {
+          title: { display: true, text: "Flow at outfall (cfs)" },
+          beginAtZero: true,
+        },
+      },
+    },
+  });
+
+  // ----------------------------------------------------------
+  // Map 3: Subbasins + subbasin centroids (iteration candidates)
+  // ----------------------------------------------------------
+  const map3 = L.map("map3", { scrollWheelZoom: false });
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 18,
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+  }).addTo(map3);
+
+  const subsLayer3 = L.geoJSON(subs, {
+    style: {
+      color: "#1f2937",
+      weight: 1,
+      fillColor: "#9aa6b4",
+      fillOpacity: 0.10,
+    },
+    onEachFeature: (f, layer) => {
+      const name = f.properties.name || "subbasin";
+      layer.bindTooltip(name, { sticky: true });
+    },
+  }).addTo(map3);
+
+  L.geoJSON(subCentroids, {
+    pointToLayer: (f, latlng) => L.circleMarker(latlng, {
+      radius: 5,
+      fillColor: "#dc2626",
+      color: "#7a1212",
+      weight: 1.2,
+      fillOpacity: 0.95,
+    }).bindTooltip(f.properties.centroid_id, { sticky: true }),
+  }).addTo(map3);
+
+  map3.fitBounds(subsLayer3.getBounds(), { padding: [20, 20] });
+
+  // ----------------------------------------------------------
+  // Hyetograph chart (all 19 subbasins)
+  // ----------------------------------------------------------
+  // Color subbasins by their storm-total depth using the same colormap so the chart
+  // visually rhymes with the maps.
+  const hyetoColors = hyeto.subbasins.map((sb) =>
+    depthToColor(hyeto.totals_in[sb], cmap)
+  );
+
+  const datasets = hyeto.subbasins.map((sb, i) => ({
+    label: sb,
+    data: hyeto.data[sb],
+    borderColor: hyetoColors[i],
+    backgroundColor: "transparent",
+    borderWidth: 1.4,
+    pointRadius: 0,
+    tension: 0.2,
+  }));
+
+  new Chart(document.getElementById("hyetoChart"), {
+    type: "line",
+    data: {
+      labels: hyeto.time_hours.map((h) => h.toFixed(2)),
+      datasets,
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        title: { display: true, text: "Subbasin hyetographs (15-min steps, 24-hr Type II)" },
+        legend: { display: false },
+        tooltip: { mode: "nearest", intersect: false },
+      },
+      scales: {
+        x: {
+          title: { display: true, text: "Time (hours)" },
+          ticks: {
+            maxTicksLimit: 13,
+            callback: function (val) {
+              const lbl = this.getLabelForValue(val);
+              return parseFloat(lbl).toFixed(0);
+            },
+          },
+        },
+        y: {
+          title: { display: true, text: "Incremental precip (in / 15 min)" },
+          beginAtZero: true,
+        },
+      },
+    },
+  });
+})();
+</script>
+
+</body>
+</html>

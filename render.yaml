@@ -1,0 +1,6 @@
+services:
+  - type: web
+    name: freq-flow-isohyet
+    runtime: static
+    buildCommand: ""
+    staticPublishPath: ./presentation
