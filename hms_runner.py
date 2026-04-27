@@ -26,8 +26,7 @@ from pydsstools.heclib.dss.HecDss import Open
 # --- Project-specific defaults; overridable per call ------------------------
 HMS_CMD = Path(r"C:\Program Files\HEC\HEC-HMS\4.12\HEC-HMS.cmd")
 HMS_PROJECT_DIR = Path(
-    r"C:\Users\MBMcManus\OneDrive - Garver\Documents\Work\I57\HMS"
-    r"\I_57_Gage_Analysis_HMS4.12_AutoHyeto\I-57 Gage Analysis"
+    r"C:\Temp\I_57_Gage_Analysis_HMS4.12_AutoHyeto\I-57 Gage Analysis"
 )
 HMS_PROJECT_NAME = "I_57_Gage_Analysis"
 HMS_HYETO_DSS = HMS_PROJECT_DIR / "data" / "hyeto.dss"
@@ -202,8 +201,13 @@ def read_target_hydrograph(
 
 
 def hms_run_name(frequency_yr: int) -> str:
-    """Run-name template used in the HMS project: ``<freq>yr_24hr_Hyeto``."""
-    return f"{frequency_yr}yr_24hr_Hyeto"
+    """Run-name template used in the HMS project: ``<freq>yr_24hr_Hyeto``.
+
+    Zero-padded to 3 digits — matches HMS's stored run name for sub-100-yr
+    frequencies (e.g., ``050yr_24hr_Hyeto`` for 50-yr) and is unchanged for
+    3-digit frequencies (100, 500).
+    """
+    return f"{frequency_yr:03d}yr_24hr_Hyeto"
 
 
 # Watershed outlet element where peak flow is evaluated. HMS basin element name.

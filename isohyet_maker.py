@@ -118,12 +118,13 @@ TEMPORAL_CSV = DATA_DIR / "HydroCad Rainfall Temporal Distribtions.csv"
 PROJECT_NAME = "I57"
 SUBBASIN_SHP = INPUT_DIR / "I57" / "I-57_HMS_Subbasins.shp"
 
-# Atlas 14 raster path per frequency. 50-yr currently excluded from sweeps.
+# Atlas 14 raster path per frequency.
 ATLAS14_RASTERS: dict[int, Path] = {
+    50:  INPUT_DIR / "I57" / "I57_050yr24ha.asc",
     100: INPUT_DIR / "I57" / "I57_100yr24ha.asc",
     500: INPUT_DIR / "I57" / "I57_500yr24ha.asc",
 }
-FREQUENCIES_YR: list[int] = [100, 500]
+FREQUENCIES_YR: list[int] = [50, 100, 500]
 
 # Hyetograph start time — must overlap the HMS run's Control Specifications
 # time window. Set to match the gridded-precip control spec already used in
@@ -422,19 +423,19 @@ def run_full_scenario(
 if __name__ == "__main__":
     if not SUBBASIN_SHP.exists():
         raise SystemExit(f"Subbasin shapefile not found: {SUBBASIN_SHP}")
-    for fy in (100, 500):
+    for fy in FREQUENCIES_YR:
         if not ATLAS14_RASTERS[fy].exists():
             raise SystemExit(f"Atlas 14 raster missing for {fy}-yr: {ATLAS14_RASTERS[fy]}")
 
     out_dir = OUTPUT_DIR / PROJECT_NAME
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    # ---- TEST SWEEP: 2 centroids x 2 orientations x 2 frequencies = 8 runs ----
+    # ---- FULL SWEEP: 19 centroids x 7 orientations x 3 frequencies = 399 runs ----
     subs = load_subbasins(SUBBASIN_SHP, name_col="name")
     centroids_gdf = build_subbasin_centroids(subs, name_col="name")
-    test_centroids = centroids_gdf.iloc[:2]   # first two subbasins by file order
-    test_orientations = (220, 260)
-    test_frequencies = (100, 500)
+    test_centroids = centroids_gdf
+    test_orientations = (160, 180, 200, 220, 240, 260, 280)
+    test_frequencies = tuple(FREQUENCIES_YR)
 
     rows: list[dict] = []
     n_total = len(test_centroids) * len(test_orientations) * len(test_frequencies)

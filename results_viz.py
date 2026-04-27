@@ -226,7 +226,7 @@ def _render_html(
   .chart-wrap {{ position: relative; height: 420px; margin: 12px 0 28px; }}
   .storm-grid {{
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
     gap: 16px;
     margin: 12px 0;
   }}
@@ -235,12 +235,16 @@ def _render_html(
     background: white; display: flex; flex-direction: column;
   }}
   .storm-card .swatch-row {{
-    display: flex; align-items: center; gap: 8px; margin-bottom: 6px;
-    font-size: 13px; color: #2b3543;
+    display: flex; align-items: flex-start; gap: 8px; margin-bottom: 6px;
+    font-size: 12px; color: #2b3543; line-height: 1.35;
   }}
   .storm-card .swatch {{
     display: inline-block; width: 16px; height: 16px; border-radius: 3px;
-    border: 1px solid #6b6b6b;
+    border: 1px solid #6b6b6b; flex: 0 0 auto; margin-top: 2px;
+  }}
+  .storm-card .swatch-row span:last-child {{
+    min-width: 0; flex: 1 1 auto;
+    overflow-wrap: anywhere; word-break: break-word;
   }}
   .storm-card img {{
     width: 100%; height: auto; display: block; border-radius: 3px;
