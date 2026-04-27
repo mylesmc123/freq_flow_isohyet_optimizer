@@ -37,10 +37,24 @@
     padding-bottom: 6px;
   }
   h1 + .subtitle {
-    margin: 0 0 32px;
+    margin: 0 0 16px;
     color: #5b6574;
     font-size: 15px;
   }
+  .results-link {
+    margin: 0 0 28px;
+    padding: 10px 14px;
+    background: #fef9c3;
+    border: 1px solid #fbbf24;
+    border-radius: 5px;
+    font-size: 14px;
+  }
+  .results-link a {
+    color: var(--accent);
+    font-weight: 600;
+    text-decoration: none;
+  }
+  .results-link a:hover { text-decoration: underline; }
   h2 {
     margin: 48px 0 12px;
     font-size: 21px;
@@ -188,6 +202,10 @@
 
 <h1>Frequency-Flow Isohyet Optimizer</h1>
 <div class="subtitle">A hybrid Atlas&nbsp;14 / HMR&nbsp;52 design-storm method for iterating peak target flow at a watershed outfall.</div>
+
+<div class="results-link">
+  <a href="./_iteration_results.html">View latest iteration results &rarr;</a>
+</div>
 
 <!-- ============================================================ -->
 <h2>1. Problem Statement</h2>

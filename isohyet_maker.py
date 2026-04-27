@@ -69,25 +69,38 @@ Area (sqmi)	%
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import geopandas as gpd
 import numpy as np
+import pandas as pd
 from shapely.geometry import Point, Polygon
 
 from basin import (
     MI2_TO_M2,
     WORKING_CRS,
+    build_subbasin_centroids,
     compute_subbasin_means,
     get_centroid_depth,
     load_basin,
     load_subbasins,
 )
+from dss_io import write_subbasin_hyetographs_dss
 from hmr52 import (
     build_isohyet_field,
     build_nested_isohyet_polygons,
     load_dad_curve,
 )
+from hms_runner import (
+    HMS_HYETO_DSS,
+    TARGET_ELEMENT,
+    find_results_dss,
+    hms_run_name,
+    read_target_hydrograph,
+    run_hms,
+)
+from results_viz import build_results_html
 from temporal import (
     build_subbasin_hyetographs,
     load_temporal_distribution,
@@ -95,6 +108,7 @@ from temporal import (
 
 PROJECT_DIR = Path(__file__).parent
 DATA_DIR = PROJECT_DIR / "data"
+INPUT_DIR = PROJECT_DIR / "input"
 OUTPUT_DIR = PROJECT_DIR / "output"
 DAD_CSV = DATA_DIR / "hmr52_dad_24hr.csv"
 TEMPORAL_CSV = DATA_DIR / "HydroCad Rainfall Temporal Distribtions.csv"
@@ -102,6 +116,28 @@ TEMPORAL_CSV = DATA_DIR / "HydroCad Rainfall Temporal Distribtions.csv"
 # Project tag — outputs are written to OUTPUT_DIR/PROJECT_NAME/ so that runs
 # for different basins/studies don't collide.
 PROJECT_NAME = "I57"
+SUBBASIN_SHP = INPUT_DIR / "I57" / "I-57_HMS_Subbasins.shp"
+
+# Atlas 14 raster path per frequency. 50-yr currently excluded from sweeps.
+ATLAS14_RASTERS: dict[int, Path] = {
+    100: INPUT_DIR / "I57" / "I57_100yr24ha.asc",
+    500: INPUT_DIR / "I57" / "I57_500yr24ha.asc",
+}
+FREQUENCIES_YR: list[int] = [100, 500]
+
+# Hyetograph start time — must overlap the HMS run's Control Specifications
+# time window. Set to match the gridded-precip control spec already used in
+# the HMS project so the same control window can drive Specified Hyetograph
+# runs without edits.
+STORM_START_TIME = "1970-01-01 00:00:00"
+
+# Locked storm-area size — see docstring for rationale.
+STORM_AREA_SQMI = 20000.0
+
+
+def _safe_id(s: str) -> str:
+    """Sanitize a string for use as a filename component."""
+    return re.sub(r"\W+", "_", str(s).strip()).strip("_")
 
 
 def scenario_basename(
@@ -156,6 +192,7 @@ def run_scenario(
     output_dt_minutes: float = 5.0,
     cell_size_m: float = 1000.0,
     name_col: str = "Name",
+    start_time: str = STORM_START_TIME,
 ) -> dict:
     """Run a single isohyet scenario through the in-memory pipeline.
 
@@ -223,6 +260,7 @@ def run_scenario(
         t_cum,
         frac_cum,
         output_dt_minutes=output_dt_minutes,
+        start_time=start_time,
     )
 
     basename = scenario_basename(
@@ -299,45 +337,190 @@ def run_scenario(
     }
 
 
-if __name__ == "__main__":
-    SUBBASIN_SHP = Path(
-        r"C:\py\freq_flow_isohyet_optimizer\input\I57\I-57_HMS_Subbasins.shp"
-    )
-    ATLAS14_RASTER = Path(
-        r"C:\py\freq_flow_isohyet_optimizer\input\I57\I57_100yr24ha.asc"
-    )
+def run_full_scenario(
+    centroid_id: str,
+    centroid_xy: tuple[float, float],
+    orientation_deg: float,
+    frequency_yr: int,
+    output_dir: Path,
+    subbasin_shp: Path = SUBBASIN_SHP,
+    storm_area_sqmi: float = STORM_AREA_SQMI,
+    name_col: str = "name",
+) -> dict:
+    """Full pipeline for one scenario: hyetograph -> HMS -> target hydrograph.
 
-    if not SUBBASIN_SHP.exists() or not ATLAS14_RASTER.exists():
-        raise SystemExit("Edit input paths in __main__ to point to real data.")
+    Steps:
+      1. ``run_scenario`` — build the storm field, subbasin means, and the
+         per-subbasin incremental-precip DataFrame; also writes the storm
+         GeoJSON + per-subbasin hyetograph CSV.
+      2. ``write_subbasin_hyetographs_dss`` overwrites ``HMS_HYETO_DSS`` so the
+         HMS Met Model picks up the new precip without any edits.
+      3. ``run_hms`` invokes the HMS CLI in batch mode to compute the named run.
+      4. ``read_target_hydrograph`` pulls the outlet flow series from the HMS
+         results DSS (multi-block stitched, missing-value sentinels filtered).
+      5. The target hydrograph is saved as ``<basename>_target.csv``.
+
+    Returns the scenario diagnostics dict (output of ``run_scenario``) augmented
+    with ``target_csv_path``, ``peak_cfs``, ``peak_time``, and ``hms_returncode``.
+    """
+    if frequency_yr not in ATLAS14_RASTERS:
+        raise ValueError(
+            f"No Atlas 14 raster registered for {frequency_yr}-yr; "
+            f"available: {list(ATLAS14_RASTERS)}"
+        )
+
+    safe_id = _safe_id(centroid_id)
 
     result = run_scenario(
-        subbasin_shp=SUBBASIN_SHP,
-        atlas14_raster=ATLAS14_RASTER,
-        centroid_xy=None,           # use basin centroid
-        orientation_deg=235.0,      # HMR52 Table 9 Central Plains average
-        storm_area_sqmi=20000.0,    # storm size for the test scenario
-        frequency_yr=100,
-        centroid_id="basinC",
-        output_dir=OUTPUT_DIR / PROJECT_NAME,
-        name_col="name",            # actual subbasin name column in this shapefile
+        subbasin_shp=subbasin_shp,
+        atlas14_raster=ATLAS14_RASTERS[frequency_yr],
+        centroid_xy=centroid_xy,
+        orientation_deg=orientation_deg,
+        storm_area_sqmi=storm_area_sqmi,
+        frequency_yr=frequency_yr,
+        centroid_id=safe_id,
+        output_dir=output_dir,
+        name_col=name_col,
     )
 
-    print("=== Scenario diagnostics ===")
-    print(f"Basename:           {result['basename']}")
-    print(f"Basin area:         {result['basin_area_sqmi']:.1f} sq mi")
-    print(f"Centroid (m):       {result['centroid_xy']}")
-    print(f"Centroid depth:     {result['centroid_depth_in']:.3f} in")
-    print()
-    print("Subbasin storm-total means (in):")
-    print(result["subbasin_means_in"].to_string())
-    print()
-    hyeto = result["hyeto_df"]
-    print(f"Hyetograph DataFrame: {hyeto.shape[0]} timesteps x {hyeto.shape[1]} subbasins")
-    print(f"  Time range: {hyeto.index[0]} -> {hyeto.index[-1]}")
-    print(f"  Per-subbasin sum (should match storm-total means above):")
-    print(hyeto.sum().to_string())
-    print()
-    print(f"Wrote: {result['geojson_path']}")
-    print(f"Wrote: {result['centroid_geojson_path']}")
-    print(f"Wrote: {result['hyeto_csv_path']}")
+    write_subbasin_hyetographs_dss(
+        result["hyeto_df"], HMS_HYETO_DSS, overwrite=True
+    )
+
+    run_name = hms_run_name(frequency_yr)
+    print(f"  Running HMS ({run_name}) ...", flush=True)
+    hms_result = run_hms(run_name)
+    if hms_result.returncode != 0:
+        print(f"  HMS exit code: {hms_result.returncode}")
+        if hms_result.stderr:
+            print("  HMS stderr (tail):")
+            for line in hms_result.stderr.splitlines()[-6:]:
+                print(f"    {line}")
+
+    target_df = read_target_hydrograph(
+        find_results_dss(run_name), TARGET_ELEMENT, run_name=run_name
+    )
+    target_csv = output_dir / f"{result['basename']}_target.csv"
+    target_df[["flow_cfs"]].to_csv(target_csv)
+
+    peak_cfs = float(target_df["flow_cfs"].max())
+    peak_time = target_df["flow_cfs"].idxmax()
+
+    return {
+        **result,
+        "target_csv_path": target_csv,
+        "target_df": target_df[["flow_cfs"]],
+        "peak_cfs": peak_cfs,
+        "peak_time": peak_time,
+        "hms_returncode": hms_result.returncode,
+        "centroid_id_raw": centroid_id,
+        "frequency_yr": frequency_yr,
+        "orientation_deg": orientation_deg,
+    }
+
+
+if __name__ == "__main__":
+    if not SUBBASIN_SHP.exists():
+        raise SystemExit(f"Subbasin shapefile not found: {SUBBASIN_SHP}")
+    for fy in (100, 500):
+        if not ATLAS14_RASTERS[fy].exists():
+            raise SystemExit(f"Atlas 14 raster missing for {fy}-yr: {ATLAS14_RASTERS[fy]}")
+
+    out_dir = OUTPUT_DIR / PROJECT_NAME
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    # ---- TEST SWEEP: 2 centroids x 2 orientations x 2 frequencies = 8 runs ----
+    subs = load_subbasins(SUBBASIN_SHP, name_col="name")
+    centroids_gdf = build_subbasin_centroids(subs, name_col="name")
+    test_centroids = centroids_gdf.iloc[:2]   # first two subbasins by file order
+    test_orientations = (220, 260)
+    test_frequencies = (100, 500)
+
+    rows: list[dict] = []
+    n_total = len(test_centroids) * len(test_orientations) * len(test_frequencies)
+    n = 0
+    for _, row in test_centroids.iterrows():
+        cid = str(row["centroid_id"])
+        cxy = (row.geometry.x, row.geometry.y)
+        for orient in test_orientations:
+            for freq in test_frequencies:
+                n += 1
+                print(f"\n[{n}/{n_total}] {freq}-yr  centroid={cid!r}  orient={orient}deg")
+                result = run_full_scenario(
+                    centroid_id=cid,
+                    centroid_xy=cxy,
+                    orientation_deg=float(orient),
+                    frequency_yr=freq,
+                    output_dir=out_dir,
+                )
+                print(
+                    f"  Peak: {result['peak_cfs']:>12,.0f} cfs"
+                    f"   at {result['peak_time']}"
+                    f"   centroid_depth={result['centroid_depth_in']:.2f} in"
+                )
+                metadata = {
+                    "iteration_name": result["basename"],
+                    "frequency_yr": freq,
+                    "centroid_id": cid,
+                    "orientation_deg": orient,
+                    "centroid_depth_in": result["centroid_depth_in"],
+                    "peak_cfs": result["peak_cfs"],
+                    "peak_time": str(result["peak_time"]),
+                    "storm_geojson_path": str(result["geojson_path"]),
+                    "hyeto_csv_path": str(result["hyeto_csv_path"]),
+                    "target_csv_path": str(result["target_csv_path"]),
+                    "hms_returncode": result["hms_returncode"],
+                }
+                # Wide-format hydrograph: one column per timestamp ("Q@YYYY-MM-DD HH:MM").
+                # Append at the end of the row so metadata stays readable.
+                target_series = result["target_df"]["flow_cfs"]
+                hyd_cols = {
+                    f"Q@{ts.strftime('%Y-%m-%d %H:%M')}": float(v)
+                    for ts, v in target_series.items()
+                }
+                rows.append({**metadata, **hyd_cols})
+
+    manifest = pd.DataFrame(rows)
+    manifest_csv = out_dir / "_manifest.csv"
+    manifest.to_csv(manifest_csv, index=False)
+
+    print("\n=== Sweep complete ===")
+    # Print only the metadata columns to keep the console summary readable.
+    summary_cols = [
+        "iteration_name", "frequency_yr", "centroid_id", "orientation_deg",
+        "centroid_depth_in", "peak_cfs", "peak_time", "hms_returncode",
+    ]
+    print(manifest[summary_cols].to_string(index=False))
+    print(f"\nManifest (wide, with hydrograph cols): {manifest_csv}")
+    winner = manifest.loc[manifest["peak_cfs"].idxmax()]
+    print(
+        f"\nHighest peak: {winner['peak_cfs']:,.0f} cfs"
+        f"  ({winner['frequency_yr']}-yr, {winner['centroid_id']!r}, {winner['orientation_deg']}°)"
+    )
+
+    # Build the HTML results visualization next to the manifest.
+    html_path = build_results_html(
+        manifest_csv=manifest_csv,
+        out_dir=out_dir,
+        subbasin_shp=SUBBASIN_SHP,
+        name_col="name",
+        title=f"Iteration Results — {PROJECT_NAME}",
+        target_element=TARGET_ELEMENT,
+    )
+    print(f"Results page: {html_path}")
+
+    # Mirror the rendered HTML + storm thumbnails into presentation/ so the
+    # results page is reachable from the deployed methodology site (Render
+    # only serves files inside the publish directory).
+    import shutil
+    deploy_dir = PROJECT_DIR / "presentation"
+    deploy_dir.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(html_path, deploy_dir / html_path.name)
+    src_viz = out_dir / "_viz"
+    dst_viz = deploy_dir / "_viz"
+    if src_viz.exists():
+        if dst_viz.exists():
+            shutil.rmtree(dst_viz)
+        shutil.copytree(src_viz, dst_viz)
+    print(f"Deployed copy:  {deploy_dir / html_path.name}")
 
