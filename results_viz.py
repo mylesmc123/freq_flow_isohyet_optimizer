@@ -285,10 +285,27 @@ def _render_html(
   nav.toc a:hover {{ text-decoration: underline; }}
   section {{ scroll-margin-top: 12px; }}
   .count {{ color: #6b7280; font-weight: 400; font-size: 0.85em; }}
+  .page-nav {{
+    margin: 12px 0; padding: 8px 14px;
+    background: #eef3f8; border: 1px solid #cdd7e3; border-radius: 5px;
+    font-size: 14px; text-align: center;
+  }}
+  .page-nav a {{ color: var(--accent); text-decoration: none; font-weight: 500; }}
+  .page-nav a:hover {{ text-decoration: underline; }}
+  .page-nav .current {{ color: #6b7280; font-weight: 500; }}
+  .page-nav .sep {{ color: #9aa6b4; margin: 0 6px; }}
 </style>
 </head>
 <body>
 <main>
+
+<nav class="page-nav">
+  <a href="./index.html">Methodology</a>
+  <span class="sep">&middot;</span>
+  <span class="current">Iteration Results</span>
+  <span class="sep">&middot;</span>
+  <a href="./_comparison_results.html">Winner vs. Baseline</a>
+</nav>
 
 <h1>{title}</h1>
 <div class="meta">{n_total} scenario{'' if n_total == 1 else 's'} swept across {len(sections)} frequenc{'y' if len(sections) == 1 else 'ies'}{target_clause}</div>
@@ -366,6 +383,14 @@ const PAYLOAD = {payload_json};
   }}
 }})();
 </script>
+
+<nav class="page-nav">
+  <a href="./index.html">Methodology</a>
+  <span class="sep">&middot;</span>
+  <span class="current">Iteration Results</span>
+  <span class="sep">&middot;</span>
+  <a href="./_comparison_results.html">Winner vs. Baseline</a>
+</nav>
 
 </main>
 </body>

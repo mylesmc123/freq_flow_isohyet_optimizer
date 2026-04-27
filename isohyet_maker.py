@@ -93,13 +93,19 @@ from hmr52 import (
     load_dad_curve,
 )
 from hms_runner import (
+    HMS_FAILURE_BACKUP,
     HMS_HYETO_DSS,
+    HMS_PRISTINE_BACKUP,
     TARGET_ELEMENT,
+    ensure_pristine_backup,
     find_results_dss,
     hms_run_name,
     read_target_hydrograph,
+    restore_hms_project,
     run_hms,
+    snapshot_hms_project,
 )
+from compare_results import build_comparison_html
 from results_viz import build_results_html
 from temporal import (
     build_subbasin_hyetographs,
@@ -389,18 +395,52 @@ def run_full_scenario(
     )
 
     run_name = hms_run_name(frequency_yr)
-    print(f"  Running HMS ({run_name}) ...", flush=True)
-    hms_result = run_hms(run_name)
-    if hms_result.returncode != 0:
-        print(f"  HMS exit code: {hms_result.returncode}")
-        if hms_result.stderr:
-            print("  HMS stderr (tail):")
-            for line in hms_result.stderr.splitlines()[-6:]:
-                print(f"    {line}")
 
-    target_df = read_target_hydrograph(
-        find_results_dss(run_name), TARGET_ELEMENT, run_name=run_name
-    )
+    # Retry on HMS failure with project-state recovery: HMS sometimes corrupts
+    # the on-disk project (e.g. drops a basin element from the .hms file) when
+    # a compute fails, which then breaks every subsequent run too. Before
+    # each retry we snapshot the failed state to HMS_FAILURE_BACKUP for
+    # forensics, then restore the project from the pristine backup taken at
+    # sweep start, then re-write the scenario's hyeto.dss. After the
+    # configured retries are exhausted we re-raise and the sweep aborts per
+    # strict-mode policy.
+    max_retries = 2  # up to 3 total attempts
+    target_df = None
+    last_error: Exception | None = None
+    for attempt in range(max_retries + 1):
+        label = f"attempt {attempt + 1}/{max_retries + 1}"
+        if attempt > 0 and HMS_PRISTINE_BACKUP.exists():
+            print(f"    Snapshotting failed state to {HMS_FAILURE_BACKUP.name} ...")
+            snapshot_hms_project(HMS_FAILURE_BACKUP)
+            print(f"    Restoring HMS project from pristine backup ...")
+            restore_hms_project(HMS_PRISTINE_BACKUP)
+            # The restore overwrites data/hyeto.dss with the pristine version;
+            # re-write the current scenario's hyetograph so HMS reads the
+            # correct precip on retry.
+            write_subbasin_hyetographs_dss(
+                result["hyeto_df"], HMS_HYETO_DSS, overwrite=True
+            )
+        print(f"  Running HMS ({run_name}) [{label}] ...", flush=True)
+        hms_result = run_hms(run_name)
+        if hms_result.returncode != 0:
+            print(f"    HMS exit code: {hms_result.returncode}")
+            if hms_result.stderr:
+                print("    HMS stderr (tail):")
+                for line in hms_result.stderr.splitlines()[-6:]:
+                    print(f"      {line}")
+        try:
+            target_df = read_target_hydrograph(
+                find_results_dss(run_name), TARGET_ELEMENT, run_name=run_name
+            )
+            break
+        except KeyError as e:
+            last_error = e
+            if attempt < max_retries:
+                print(f"    Target FLOW not in results DSS — retrying with restored project.")
+                continue
+            raise
+    assert target_df is not None, last_error
+
     target_csv = output_dir / f"{result['basename']}_target.csv"
     target_df[["flow_cfs"]].to_csv(target_csv)
 
@@ -430,14 +470,40 @@ if __name__ == "__main__":
     out_dir = OUTPUT_DIR / PROJECT_NAME
     out_dir.mkdir(parents=True, exist_ok=True)
 
+    # Pristine HMS-project snapshot: created once at the very first sweep.
+    # Reused for restoring the project after any failed compute. Delete the
+    # pristine folder manually if you've made HMS edits you want captured.
+    if ensure_pristine_backup():
+        print(f"Created pristine HMS project backup at {HMS_PRISTINE_BACKUP}")
+    else:
+        print(f"Reusing pristine HMS project backup at {HMS_PRISTINE_BACKUP}")
+
     # ---- FULL SWEEP: 19 centroids x 7 orientations x 3 frequencies = 399 runs ----
     subs = load_subbasins(SUBBASIN_SHP, name_col="name")
     centroids_gdf = build_subbasin_centroids(subs, name_col="name")
     test_centroids = centroids_gdf
     test_orientations = (160, 180, 200, 220, 240, 260, 280)
-    test_frequencies = tuple(FREQUENCIES_YR)
+    test_frequencies = tuple(FREQUENCIES_YR)  # 50, 100, 500
 
+    manifest_csv = out_dir / "_manifest.csv"
+
+    # Resume support: if a manifest from a previous (interrupted) sweep exists,
+    # load it and skip any (centroid_id, orientation_deg, frequency_yr) that's
+    # already present. The manifest is written incrementally after every
+    # successful scenario so an aborted sweep loses at most the in-flight row.
     rows: list[dict] = []
+    completed: set[tuple[int, str, int]] = set()
+    if manifest_csv.exists():
+        existing = pd.read_csv(manifest_csv)
+        rows = existing.to_dict("records")
+        for r in rows:
+            completed.add((
+                int(r["frequency_yr"]),
+                str(r["centroid_id"]),
+                int(round(float(r["orientation_deg"]))),
+            ))
+        print(f"Resuming: {len(completed)} scenarios already in manifest at {manifest_csv}")
+
     n_total = len(test_centroids) * len(test_orientations) * len(test_frequencies)
     n = 0
     for _, row in test_centroids.iterrows():
@@ -446,6 +512,10 @@ if __name__ == "__main__":
         for orient in test_orientations:
             for freq in test_frequencies:
                 n += 1
+                key = (int(freq), cid, int(orient))
+                if key in completed:
+                    print(f"\n[{n}/{n_total}] {freq}-yr  centroid={cid!r}  orient={orient}deg  -- already done, skipping")
+                    continue
                 print(f"\n[{n}/{n_total}] {freq}-yr  centroid={cid!r}  orient={orient}deg")
                 result = run_full_scenario(
                     centroid_id=cid,
@@ -480,9 +550,11 @@ if __name__ == "__main__":
                     for ts, v in target_series.items()
                 }
                 rows.append({**metadata, **hyd_cols})
+                completed.add(key)
+                # Incremental write so an interrupted sweep can resume.
+                pd.DataFrame(rows).to_csv(manifest_csv, index=False)
 
     manifest = pd.DataFrame(rows)
-    manifest_csv = out_dir / "_manifest.csv"
     manifest.to_csv(manifest_csv, index=False)
 
     print("\n=== Sweep complete ===")
@@ -524,4 +596,27 @@ if __name__ == "__main__":
             shutil.rmtree(dst_viz)
         shutil.copytree(src_viz, dst_viz)
     print(f"Deployed copy:  {deploy_dir / html_path.name}")
+
+    # Build the winner-vs-baseline comparison page. Atlas 14 PNGs are written
+    # into out_dir/example/data so the page works locally via relative paths.
+    # Then mirror both the HTML and the new atlas14 assets into presentation/
+    # (merging with existing methodology-page assets) so the deployed page
+    # also resolves the same relative URLs.
+    compare_path = build_comparison_html(
+        manifest_csv=manifest_csv,
+        out_dir=out_dir,
+        input_dir=INPUT_DIR / "I57",
+        subbasin_shp=SUBBASIN_SHP,
+        name_col="name",
+        title=f"Hyetograph Winner vs. Gridded Atlas 14 Baseline — {PROJECT_NAME}",
+    )
+    shutil.copy2(compare_path, deploy_dir / compare_path.name)
+    deploy_assets = deploy_dir / "example" / "data"
+    deploy_assets.mkdir(parents=True, exist_ok=True)
+    src_assets = out_dir / "example" / "data"
+    if src_assets.exists():
+        for asset in src_assets.glob("atlas14_*"):
+            shutil.copy2(asset, deploy_assets / asset.name)
+    print(f"Comparison page: {compare_path}")
+    print(f"Deployed copy:   {deploy_dir / compare_path.name}")
 

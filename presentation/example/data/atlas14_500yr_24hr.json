@@ -1,0 +1,217 @@
+{
+  "bounds_latlon": [
+    35.829066,
+    -92.313182,
+    37.454001,
+    -89.804949
+  ],
+  "vmin": 8.469,
+  "vmax": 12.105,
+  "cmap": "viridis",
+  "stops": [
+    {
+      "value": 8.469,
+      "color": "#440154"
+    },
+    {
+      "value": 8.542,
+      "color": "#45085b"
+    },
+    {
+      "value": 8.614,
+      "color": "#470f62"
+    },
+    {
+      "value": 8.687,
+      "color": "#471669"
+    },
+    {
+      "value": 8.76,
+      "color": "#481d6f"
+    },
+    {
+      "value": 8.833,
+      "color": "#482374"
+    },
+    {
+      "value": 8.905,
+      "color": "#472a79"
+    },
+    {
+      "value": 8.978,
+      "color": "#46307d"
+    },
+    {
+      "value": 9.051,
+      "color": "#453681"
+    },
+    {
+      "value": 9.123,
+      "color": "#423d84"
+    },
+    {
+      "value": 9.196,
+      "color": "#404387"
+    },
+    {
+      "value": 9.269,
+      "color": "#3e4989"
+    },
+    {
+      "value": 9.342,
+      "color": "#3c4e8a"
+    },
+    {
+      "value": 9.414,
+      "color": "#39548b"
+    },
+    {
+      "value": 9.487,
+      "color": "#37598c"
+    },
+    {
+      "value": 9.56,
+      "color": "#345e8d"
+    },
+    {
+      "value": 9.633,
+      "color": "#32638d"
+    },
+    {
+      "value": 9.705,
+      "color": "#2f698d"
+    },
+    {
+      "value": 9.778,
+      "color": "#2d6e8e"
+    },
+    {
+      "value": 9.851,
+      "color": "#2b738e"
+    },
+    {
+      "value": 9.923,
+      "color": "#29788e"
+    },
+    {
+      "value": 9.996,
+      "color": "#277c8e"
+    },
+    {
+      "value": 10.069,
+      "color": "#26818e"
+    },
+    {
+      "value": 10.142,
+      "color": "#24868d"
+    },
+    {
+      "value": 10.214,
+      "color": "#228a8d"
+    },
+    {
+      "value": 10.287,
+      "color": "#208f8c"
+    },
+    {
+      "value": 10.36,
+      "color": "#1f958b"
+    },
+    {
+      "value": 10.432,
+      "color": "#1e998a"
+    },
+    {
+      "value": 10.505,
+      "color": "#1e9e88"
+    },
+    {
+      "value": 10.578,
+      "color": "#1fa386"
+    },
+    {
+      "value": 10.651,
+      "color": "#22a784"
+    },
+    {
+      "value": 10.723,
+      "color": "#26ac81"
+    },
+    {
+      "value": 10.796,
+      "color": "#2bb17d"
+    },
+    {
+      "value": 10.869,
+      "color": "#32b57a"
+    },
+    {
+      "value": 10.941,
+      "color": "#3bba75"
+    },
+    {
+      "value": 11.014,
+      "color": "#44be70"
+    },
+    {
+      "value": 11.087,
+      "color": "#4dc26b"
+    },
+    {
+      "value": 11.16,
+      "color": "#57c665"
+    },
+    {
+      "value": 11.232,
+      "color": "#62ca5f"
+    },
+    {
+      "value": 11.305,
+      "color": "#6dce58"
+    },
+    {
+      "value": 11.378,
+      "color": "#79d151"
+    },
+    {
+      "value": 11.451,
+      "color": "#86d449"
+    },
+    {
+      "value": 11.523,
+      "color": "#95d73f"
+    },
+    {
+      "value": 11.596,
+      "color": "#a2da37"
+    },
+    {
+      "value": 11.669,
+      "color": "#afdc2e"
+    },
+    {
+      "value": 11.741,
+      "color": "#bdde26"
+    },
+    {
+      "value": 11.814,
+      "color": "#cae01e"
+    },
+    {
+      "value": 11.887,
+      "color": "#d7e219"
+    },
+    {
+      "value": 11.96,
+      "color": "#e4e318"
+    },
+    {
+      "value": 12.032,
+      "color": "#f1e51c"
+    },
+    {
+      "value": 12.105,
+      "color": "#fde724"
+    }
+  ]
+}

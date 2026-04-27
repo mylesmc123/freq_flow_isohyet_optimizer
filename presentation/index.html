@@ -41,20 +41,23 @@
     color: #5b6574;
     font-size: 15px;
   }
-  .results-link {
-    margin: 0 0 28px;
-    padding: 10px 14px;
-    background: #fef9c3;
-    border: 1px solid #fbbf24;
+  .page-nav {
+    margin: 12px 0;
+    padding: 8px 14px;
+    background: #eef3f8;
+    border: 1px solid #cdd7e3;
     border-radius: 5px;
     font-size: 14px;
+    text-align: center;
   }
-  .results-link a {
+  .page-nav a {
     color: var(--accent);
-    font-weight: 600;
     text-decoration: none;
+    font-weight: 500;
   }
-  .results-link a:hover { text-decoration: underline; }
+  .page-nav a:hover { text-decoration: underline; }
+  .page-nav .current { color: #6b7280; font-weight: 500; }
+  .page-nav .sep { color: #9aa6b4; margin: 0 6px; }
   h2 {
     margin: 48px 0 12px;
     font-size: 21px;
@@ -203,9 +206,13 @@
 <h1>Frequency-Flow Isohyet Optimizer</h1>
 <div class="subtitle">A hybrid Atlas&nbsp;14 / HMR&nbsp;52 design-storm method for iterating peak target flow at a watershed outfall.</div>
 
-<div class="results-link">
-  <a href="./_iteration_results.html">View latest iteration results &rarr;</a>
-</div>
+<nav class="page-nav">
+  <span class="current">Methodology</span>
+  <span class="sep">&middot;</span>
+  <a href="./_iteration_results.html">Iteration Results</a>
+  <span class="sep">&middot;</span>
+  <a href="./_comparison_results.html">Winner vs. Baseline</a>
+</nav>
 
 <!-- ============================================================ -->
 <h2>1. Problem Statement</h2>
@@ -452,6 +459,14 @@ scenario is identified, a gridded DSS file will be created for that frequency ev
   Working CRS: EPSG:5070 (USA Contiguous Albers Equal Area). Iteration loop and
   <code>pydsstools</code>-based DSS read/write to follow.
 </div>
+
+<nav class="page-nav">
+  <span class="current">Methodology</span>
+  <span class="sep">&middot;</span>
+  <a href="./_iteration_results.html">Iteration Results</a>
+  <span class="sep">&middot;</span>
+  <a href="./_comparison_results.html">Winner vs. Baseline</a>
+</nav>
 
 </main>
 

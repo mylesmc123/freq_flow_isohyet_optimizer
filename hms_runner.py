@@ -15,6 +15,7 @@ Iteration loop pattern:
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 import tempfile
 from pathlib import Path
@@ -31,6 +32,104 @@ HMS_PROJECT_DIR = Path(
 HMS_PROJECT_NAME = "I_57_Gage_Analysis"
 HMS_HYETO_DSS = HMS_PROJECT_DIR / "data" / "hyeto.dss"
 
+# Sibling directories for project snapshots used by snapshot/restore. The
+# pristine backup is captured once at sweep start and reused as the source
+# of truth for restoring a clean model. The last-failure copy preserves
+# whatever HMS left behind on a failed compute, for forensics.
+HMS_PRISTINE_BACKUP = HMS_PROJECT_DIR.with_name(HMS_PROJECT_DIR.name + "_pristine")
+HMS_FAILURE_BACKUP = HMS_PROJECT_DIR.with_name(HMS_PROJECT_DIR.name + "_lastfailure")
+
+
+# Subdirectory names skipped during snapshot/restore. ``terrain/`` holds
+# tens of thousands of GeoTIFF tiles that HMS doesn't modify and that
+# Windows often refuses to delete (file-indexer / AV contention), so we
+# leave it in place on both ends.
+HMS_SNAPSHOT_SKIP_DIRS: set[str] = {"terrain"}
+
+
+def _safe_remove(path: Path) -> None:
+    """Best-effort deletion of a file or directory; swallows PermissionError."""
+    try:
+        if path.is_file() or path.is_symlink():
+            path.unlink()
+        elif path.is_dir():
+            shutil.rmtree(path)
+    except PermissionError:
+        pass
+
+
+def snapshot_hms_project(
+    dest: Path,
+    project_dir: Path = HMS_PROJECT_DIR,
+) -> None:
+    """Snapshot the HMS project to ``dest``, excluding ``terrain/``.
+
+    Captures every top-level file and every subdirectory other than the
+    ones in ``HMS_SNAPSHOT_SKIP_DIRS`` (currently just ``terrain``). HMS
+    corruption can affect both top-level config files (``.hms``, ``.basin``,
+    ...) and files inside ``data/`` and ``results/``, so we need full coverage
+    minus the static terrain rasters.
+    """
+    dest.mkdir(parents=True, exist_ok=True)
+    # Clear stale items in dest, but leave any pre-existing terrain alone.
+    for item in dest.iterdir():
+        if item.is_dir() and item.name in HMS_SNAPSHOT_SKIP_DIRS:
+            continue
+        _safe_remove(item)
+    # Copy from project_dir, skipping terrain.
+    for item in project_dir.iterdir():
+        target = dest / item.name
+        if item.is_file():
+            shutil.copy2(item, target)
+        elif item.is_dir() and item.name not in HMS_SNAPSHOT_SKIP_DIRS:
+            shutil.copytree(item, target)
+
+
+def restore_hms_project(
+    src: Path,
+    project_dir: Path = HMS_PROJECT_DIR,
+) -> None:
+    """Restore the HMS project from a snapshot at ``src``.
+
+    Replaces every top-level file and every non-skipped subdirectory in
+    ``project_dir`` with the snapshot's contents. The ``terrain/`` subdir
+    in ``project_dir`` is left untouched (the snapshot is expected not to
+    contain it; if it does, it's still skipped here). Callers that need
+    ``data/hyeto.dss`` to reflect the current scenario must re-write it
+    after restore.
+    """
+    if not src.exists():
+        raise FileNotFoundError(f"HMS project snapshot not found at {src}")
+    project_dir.mkdir(parents=True, exist_ok=True)
+    # Clear project_dir except terrain.
+    for item in project_dir.iterdir():
+        if item.is_dir() and item.name in HMS_SNAPSHOT_SKIP_DIRS:
+            continue
+        _safe_remove(item)
+    # Copy from snapshot, skipping terrain.
+    for item in src.iterdir():
+        target = project_dir / item.name
+        if item.is_file():
+            shutil.copy2(item, target)
+        elif item.is_dir() and item.name not in HMS_SNAPSHOT_SKIP_DIRS:
+            shutil.copytree(item, target)
+
+
+def ensure_pristine_backup(
+    project_dir: Path = HMS_PROJECT_DIR,
+    pristine: Path = HMS_PRISTINE_BACKUP,
+) -> bool:
+    """Create a pristine backup of the HMS project if one doesn't already exist.
+
+    Returns True if a new backup was created, False if an existing one was
+    reused. To force a fresh capture (e.g. after manual HMS edits), delete
+    ``HMS_PRISTINE_BACKUP`` before calling.
+    """
+    if pristine.exists():
+        return False
+    snapshot_hms_project(pristine, project_dir)
+    return True
+
 
 def _build_jython_script(
     project_name: str, project_dir: Path, run_name: str
@@ -41,17 +140,35 @@ def _build_jython_script(
       - We *don't* call ``Exit(...)`` so the JVM stays alive until the script
         actually finishes. Calling ``Exit()`` raises a SystemExit that can
         terminate the process before any compute work has flushed to disk.
+      - The ``Compute`` call is wrapped in try/except: when HMS hits routing
+        instability it raises a Jython ``ValueError`` here, which would
+        otherwise propagate out and kill the JVM mid-shutdown. That ungraceful
+        exit has been observed to leave the project's ``.basin`` file in a
+        partial state (basin elements disappearing). Catching here lets HMS's
+        shutdown finish cleanly so the on-disk model is preserved.
       - ``print`` lines go to subprocess stdout — useful for verifying the
         script executed end-to-end.
     """
     pdir = str(project_dir).replace("\\", "/")
     return (
         "from hms.model.JythonHms import *\n"
+        "import time\n"
         f'print("HMS auto: opening project {project_name}")\n'
         f'OpenProject("{project_name}", "{pdir}")\n'
         f'print("HMS auto: computing {run_name}")\n'
-        f'Compute("{run_name}")\n'
-        'print("HMS auto: compute returned")\n'
+        "try:\n"
+        f'    Compute("{run_name}")\n'
+        '    print("HMS auto: compute returned cleanly")\n'
+        "except Exception as _e:\n"
+        '    print("HMS auto: compute raised: " + str(_e))\n'
+        # Hold the JVM open 8 s after Compute so any deferred DSS writes /
+        # shutdown hooks can flush before the subprocess exits. The HMS GUI
+        # gets this for free because the user closes the app some time after
+        # compute; in batch mode without this delay the FLOW records sometimes
+        # never land on disk for runs with many Muskingum routing warnings.
+        'print("HMS auto: settling 8 s for DSS flush")\n'
+        "time.sleep(8)\n"
+        'print("HMS auto: settle complete")\n'
     )
 
 
