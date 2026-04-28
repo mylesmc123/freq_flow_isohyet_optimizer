@@ -144,7 +144,10 @@ def build_results_html(
                 ],
             })
 
-        winner = max(scenarios, key=lambda s: s["peak_cfs"])
+        # Sort scenarios by peak flow descending so both the chart legend and
+        # the storm-pattern grid lead with the highest peak.
+        scenarios.sort(key=lambda s: s["peak_cfs"], reverse=True)
+        winner = scenarios[0] if scenarios else None
         sections.append({
             "frequency_yr": int(freq),
             "anchor": f"freq-{int(freq)}",
@@ -262,7 +265,7 @@ def _render_html(
     position: relative;
   }}
   .storm-card.winner::before {{
-    content: "\2605 Highest peak";
+    content: "★ Highest peak";
     position: absolute;
     top: -10px; right: 10px;
     background: #fbbf24; color: #1f2937;
