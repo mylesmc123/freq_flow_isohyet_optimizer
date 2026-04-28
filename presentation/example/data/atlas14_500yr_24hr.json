@@ -213,5 +213,7 @@
       "value": 12.105,
       "color": "#fde724"
     }
-  ]
+  ],
+  "data_min_in": 8.469,
+  "data_max_in": 12.105
 }

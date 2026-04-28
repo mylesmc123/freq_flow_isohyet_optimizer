@@ -97,6 +97,9 @@ def _render_atlas14_png(
     json_path.write_text(json.dumps({
         "bounds_latlon": [bounds.bottom, bounds.left, bounds.top, bounds.right],
         "vmin": vmin, "vmax": vmax,
+        # Aliases for the methodology-page schema, which reads ``data_min_in``
+        # and ``data_max_in`` for the "X-Y in across the basin" caption.
+        "data_min_in": vmin, "data_max_in": vmax,
         "cmap": cmap_name,
         "stops": stops,
     }, indent=2))
