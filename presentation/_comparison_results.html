@@ -4,6 +4,11 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Hyetograph Winner vs. Gridded Atlas 14 Baseline — I57</title>
+<link rel="apple-touch-icon" sizes="180x180" href="./img/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="./img/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="./img/favicon-16x16.png">
+<link rel="manifest" href="./img/site.webmanifest">
+<link rel="shortcut icon" href="./img/favicon.ico">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
 <script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
@@ -16,6 +21,26 @@
     line-height:1.5;
   }
   main { max-width:1200px; margin:0 auto; padding:28px 24px 80px; }
+  .site-header {
+    display:flex; align-items:center; gap:16px; margin:0 0 14px;
+  }
+  .site-header .site-logo-link {
+    display:block; flex:0 0 auto; line-height:0;
+  }
+  .site-header .site-logo {
+    height:160px; width:auto; display:block;
+  }
+  .site-header .site-title { min-width:0; }
+  .site-header .site-title-name {
+    font-size:24px; color:var(--accent); font-weight:600; line-height:1.2;
+  }
+  .site-header .site-title-tagline {
+    margin-top:4px; color:#5b6574; font-size:14px; line-height:1.4;
+  }
+  @media (max-width: 600px) {
+    .site-header { flex-wrap:wrap; gap:10px; }
+    .site-header .site-logo { height:112px; }
+  }
   h1 {
     margin:0 0 6px; font-size:26px; color:var(--accent);
     border-bottom:2px solid var(--accent); padding-bottom:6px;
@@ -79,6 +104,14 @@
 </head>
 <body>
 <main>
+
+<header class="site-header">
+  <a href="./index.html" class="site-logo-link"><img src="./img/isohyet_logo.png" alt="Isohyet Optimizer" class="site-logo"></a>
+  <div class="site-title">
+    <div class="site-title-name">Frequency-Flow Isohyet Optimizer</div>
+    <div class="site-title-tagline">A hybrid Atlas&nbsp;14 / HMR&nbsp;52 design-storm method for iterating peak target flow at a watershed outfall.</div>
+  </div>
+</header>
 
 <nav class="page-nav">
   <a href="./index.html">Methodology</a>
