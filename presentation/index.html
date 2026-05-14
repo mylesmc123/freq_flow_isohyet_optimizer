@@ -6,7 +6,7 @@
 <title>Frequency-Flow Isohyet Optimizer &mdash; Methodology</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
 <style>
   :root {
     --accent: #144870;
@@ -284,14 +284,22 @@ will sweep.
 <h2>3. The HMR&nbsp;52 Depth-Area-Duration Curve</h2>
 
 <p>
-The DAD curve sets the <em>shape</em> of the storm: a single anchor point near the storm
-centroid (1.0) decays with enclosed area outward. This particular curve was extracted from
-<strong>HEC-MetVue</strong>'s built-in HMR&nbsp;52 dataset for 24-hr durations, then
-extended out to 20,000&nbsp;mi&sup2; so storm sizes that envelop the full basin at any
-orientation can be modeled without clamping.
+The HMR&nbsp;52 <strong>depth-area-duration (DAD)</strong> table gives absolute storm
+depths (in) as a function of enclosed area and duration. For this project we extract the
+24-hr column from <strong>HEC-MetVue</strong>'s built-in HMR&nbsp;52 dataset and divide
+every entry by the smallest-area (near-centroid) value, producing a
+<strong>depth-area reduction (DAR)</strong> ratio that anchors at 1.0 at the centroid and
+decays with enclosed area outward. The ratio curve is using the full DAD table out to 20,000&nbsp;mi&sup2;
+more storm orientations get full coverage over the watershed basin extent.
 </p>
 
-<div class="chart-wrap"><canvas id="dadChart"></canvas></div>
+<p>
+Decoupling the ratio from the absolute depth is what lets the same shape be re-anchored
+to any Atlas&nbsp;14 centroid value &mdash; the DAD table sets the <em>shape</em>, the
+Atlas&nbsp;14 grid sets the <em>magnitude</em>.
+</p>
+
+<div class="chart-wrap"><div id="dadChart" style="width:100%;height:100%;"></div></div>
 
 <p>
 The depth at any cell inside the elliptical storm is then:
@@ -310,12 +318,11 @@ to the centroid, not on the storm's outer size).
 <h2>4. Storm Ellipse Spatial Pattern</h2>
 
 <p>
-Applying the DAD curve to a 20,000&nbsp;mi&sup2; storm centered on the basin centroid
-produces the nested isohyetal pattern below. Both maps use viridis, but with different
-stretches tuned to their data ranges &mdash; Atlas&nbsp;14 on a tight 6.5&ndash;9.5&nbsp;in
-window (its values cluster in a narrow band), the storm on 0&ndash;10&nbsp;in (its rings
-span a much wider range). The black dot marks the storm centroid; depth at that point
-equals the Atlas&nbsp;14 sample (8.40&nbsp;in for the 100-yr&nbsp;24-hr at this centroid).
+Applying the DAR curve to a 20,000&nbsp;mi&sup2; storm centered on the basin centroid
+produces the nested isohyetal pattern below. The storm rings are colored by the precip depth. The centroid 
+has the highest value (ratio 1.0) and each ring moving outward decreases accoring to the DAR curve. The black
+dot marks the storm centroid; depth at that point equals the Atlas&nbsp;14 sample
+(8.40&nbsp;in for the 100-yr&nbsp;24-hr event).
 </p>
 
 <div id="map2" class="map"></div>
@@ -337,7 +344,7 @@ by an SCS&nbsp;<strong>Type&nbsp;II 24-hr</strong> cumulative temporal distribut
 incremental precipitation for each subbasin:
 </p>
 
-<div class="chart-wrap"><canvas id="hyetoChart"></canvas></div>
+<div class="chart-wrap"><div id="hyetoChart" style="width:100%;height:100%;"></div></div>
 
 <p>
 Each line above is one subbasin's hyetograph at 15-minute resolution. The Type&nbsp;II
@@ -368,7 +375,7 @@ orientations. The result at the watershed outfall changes substantially.
   <figure><img src="example/data/comparison_storm_3.png" alt="Scenario 3"><figcaption><span class="legend-dot" style="background:#43a047"></span>N headwaters centroid, 280&deg;</figcaption></figure>
 </div>
 
-<div class="chart-wrap"><canvas id="hydroCompareChart"></canvas></div>
+<div class="chart-wrap"><div id="hydroCompareChart" style="width:100%;height:100%;"></div></div>
 
 <div class="callout">
   <strong>Illustrative only:</strong> the hydrographs above are produced by convolving each
@@ -558,45 +565,33 @@ function buildLegend(cmap, title, ticks) {
   legend1.addTo(map1);
 
   // ----------------------------------------------------------
-  // DAD curve chart
+  // DAR curve chart
   // ----------------------------------------------------------
-  new Chart(document.getElementById("dadChart"), {
-    type: "line",
-    data: {
-      labels: dadCurve.areas_sqmi,
-      datasets: [{
-        label: "HMR 52 (24-hr) depth ratio",
-        data: dadCurve.ratios,
-        borderColor: "#144870",
-        backgroundColor: "rgba(20, 72, 112, 0.12)",
-        pointBackgroundColor: "#144870",
-        pointRadius: 3,
-        tension: 0.0,
-        fill: true,
-      }],
+  Plotly.newPlot("dadChart", [{
+    x: dadCurve.areas_sqmi,
+    y: dadCurve.ratios,
+    type: "scatter",
+    mode: "lines+markers",
+    name: "HMR 52 (24-hr) depth-area reduction ratio",
+    line: { color: "#144870", width: 2, shape: "linear" },
+    marker: { color: "#144870", size: 5 },
+    fill: "tozeroy",
+    fillcolor: "rgba(20, 72, 112, 0.12)",
+    hovertemplate: "%{x:,.0f} sq mi<br>ratio %{y:.3f}<extra></extra>",
+  }], {
+    title: { text: "DAR curve (depth ratio vs. enclosed area)", font: { size: 14 } },
+    margin: { l: 60, r: 20, t: 40, b: 50 },
+    showlegend: false,
+    xaxis: {
+      title: { text: "Enclosed area (sq mi)" },
+      type: "log",
+      tickformat: ",",
     },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        title: { display: true, text: "DAD curve (depth ratio vs. enclosed area)" },
-        legend: { display: false },
-      },
-      scales: {
-        x: {
-          type: "logarithmic",
-          title: { display: true, text: "Enclosed area (sq mi)" },
-          ticks: {
-            callback: (v) => Number(v.toString()).toLocaleString(),
-          },
-        },
-        y: {
-          min: 0, max: 1,
-          title: { display: true, text: "Depth ratio (centroid = 1.0)" },
-        },
-      },
+    yaxis: {
+      title: { text: "Depth ratio (centroid = 1.0)" },
+      range: [0, 1],
     },
-  });
+  }, { responsive: true, displaylogo: false });
 
   // ----------------------------------------------------------
   // Map 2: Subbasins + storm ellipse + centroid
@@ -648,16 +643,15 @@ function buildLegend(cmap, title, ticks) {
 
   // Subbasins drawn LAST so their red outlines sit on top of the storm rings.
   // No fill so the storm colors below remain visible inside each subbasin.
+  // interactive: false so hover events pass through to the storm rings beneath —
+  // only the isohyet bands show tooltips on this map.
   L.geoJSON(subs, {
     style: {
       color: "#dc2626",
       weight: 1.6,
       fillOpacity: 0.0,
     },
-    onEachFeature: (f, layer) => {
-      const name = f.properties.name || "subbasin";
-      layer.bindTooltip(name, { sticky: true });
-    },
+    interactive: false,
   }).addTo(map2);
 
   // Fit to the storm extent (bigger than basin) but with a basin-friendly padding
@@ -671,46 +665,26 @@ function buildLegend(cmap, title, ticks) {
   // ----------------------------------------------------------
   // Comparison: 3 outflow hydrographs (illustrative)
   // ----------------------------------------------------------
-  new Chart(document.getElementById("hydroCompareChart"), {
-    type: "line",
-    data: {
-      labels: hydroCompare.time_hours,
-      datasets: hydroCompare.scenarios.map((s) => ({
-        label: `${s.label} — peak ${Math.round(s.peak_cfs).toLocaleString()} cfs (basin-mean ${s.basin_mean_in.toFixed(2)} in)`,
-        data: s.Q_cfs,
-        borderColor: s.color,
-        backgroundColor: "transparent",
-        borderWidth: 2.0,
-        pointRadius: 0,
-        tension: 0.25,
-      })),
+  Plotly.newPlot("hydroCompareChart",
+    hydroCompare.scenarios.map((s) => ({
+      x: hydroCompare.time_hours,
+      y: s.Q_cfs,
+      type: "scatter",
+      mode: "lines",
+      name: `${s.label} — peak ${Math.round(s.peak_cfs).toLocaleString()} cfs (basin-mean ${s.basin_mean_in.toFixed(2)} in)`,
+      line: { color: s.color, width: 2, shape: "spline", smoothing: 0.6 },
+      hovertemplate: "%{x:.1f} hr<br>%{y:,.0f} cfs<extra></extra>",
+    })),
+    {
+      title: { text: "Outfall hydrograph — three scenarios (illustrative)", font: { size: 14 } },
+      margin: { l: 70, r: 20, t: 40, b: 90 },
+      hovermode: "closest",
+      legend: { orientation: "h", x: 0.5, xanchor: "center", y: -0.22, font: { size: 11 } },
+      xaxis: { title: { text: "Time (hours)" }, nticks: 14, tickformat: ".0f" },
+      yaxis: { title: { text: "Flow at outfall (cfs)" }, rangemode: "tozero" },
     },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        title: { display: true, text: "Outfall hydrograph — three scenarios (illustrative)" },
-        legend: { display: true, position: "bottom", labels: { boxWidth: 14, font: { size: 11 } } },
-        tooltip: { mode: "nearest", intersect: false },
-      },
-      scales: {
-        x: {
-          title: { display: true, text: "Time (hours)" },
-          ticks: {
-            maxTicksLimit: 14,
-            callback: function (val) {
-              const lbl = this.getLabelForValue(val);
-              return parseFloat(lbl).toFixed(0);
-            },
-          },
-        },
-        y: {
-          title: { display: true, text: "Flow at outfall (cfs)" },
-          beginAtZero: true,
-        },
-      },
-    },
-  });
+    { responsive: true, displaylogo: false }
+  );
 
   // ----------------------------------------------------------
   // Map 3: Subbasins + subbasin centroids (iteration candidates)
@@ -751,52 +725,29 @@ function buildLegend(cmap, title, ticks) {
   // ----------------------------------------------------------
   // Color subbasins by their storm-total depth using the same colormap so the chart
   // visually rhymes with the maps.
-  const hyetoColors = hyeto.subbasins.map((sb) =>
-    depthToColor(hyeto.totals_in[sb], cmap)
-  );
-
-  const datasets = hyeto.subbasins.map((sb, i) => ({
-    label: sb,
-    data: hyeto.data[sb],
-    borderColor: hyetoColors[i],
-    backgroundColor: "transparent",
-    borderWidth: 1.4,
-    pointRadius: 0,
-    tension: 0.2,
+  const hyetoTraces = hyeto.subbasins.map((sb) => ({
+    x: hyeto.time_hours,
+    y: hyeto.data[sb],
+    type: "scatter",
+    mode: "lines",
+    name: sb,
+    line: {
+      color: depthToColor(hyeto.totals_in[sb], cmap),
+      width: 1.4,
+      shape: "spline",
+      smoothing: 0.5,
+    },
+    hovertemplate: `${sb}<br>%{x:.2f} hr<br>%{y:.3f} in<extra></extra>`,
   }));
 
-  new Chart(document.getElementById("hyetoChart"), {
-    type: "line",
-    data: {
-      labels: hyeto.time_hours.map((h) => h.toFixed(2)),
-      datasets,
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        title: { display: true, text: "Subbasin hyetographs (15-min steps, 24-hr Type II)" },
-        legend: { display: false },
-        tooltip: { mode: "nearest", intersect: false },
-      },
-      scales: {
-        x: {
-          title: { display: true, text: "Time (hours)" },
-          ticks: {
-            maxTicksLimit: 13,
-            callback: function (val) {
-              const lbl = this.getLabelForValue(val);
-              return parseFloat(lbl).toFixed(0);
-            },
-          },
-        },
-        y: {
-          title: { display: true, text: "Incremental precip (in / 15 min)" },
-          beginAtZero: true,
-        },
-      },
-    },
-  });
+  Plotly.newPlot("hyetoChart", hyetoTraces, {
+    title: { text: "Subbasin hyetographs (15-min steps, 24-hr Type II)", font: { size: 14 } },
+    margin: { l: 70, r: 20, t: 40, b: 50 },
+    showlegend: false,
+    hovermode: "closest",
+    xaxis: { title: { text: "Time (hours)" }, nticks: 13, tickformat: ".0f" },
+    yaxis: { title: { text: "Incremental precip (in / 15 min)" }, rangemode: "tozero" },
+  }, { responsive: true, displaylogo: false });
 })();
 </script>
 

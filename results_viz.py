@@ -188,7 +188,7 @@ def _render_html(
   <h2>{s['frequency_yr']}-yr scenarios <span class="count">({len(s['scenarios'])})</span></h2>
   <div class="winner-banner" id="winner-{s['frequency_yr']}"></div>
   <h3>Outlet hydrographs</h3>
-  <div class="chart-wrap"><canvas id="{s['chart_id']}"></canvas></div>
+  <div class="chart-wrap"><div id="{s['chart_id']}" style="width:100%;height:100%;"></div></div>
   <h3>Elliptical storm patterns</h3>
   <div class="storm-grid" id="grid-{s['frequency_yr']}"></div>
 </section>
@@ -201,7 +201,7 @@ def _render_html(
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>{title}</title>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
 <style>
   :root {{
     --accent: #144870;
@@ -323,35 +323,23 @@ const PAYLOAD = {payload_json};
 (function () {{
   for (const sec of PAYLOAD.sections) {{
     // Hydrograph chart for this frequency
-    const ctx = document.getElementById(`hydroChart-${{sec.frequency_yr}}`);
-    new Chart(ctx, {{
-      type: "line",
-      data: {{
-        labels: PAYLOAD.time_labels,
-        datasets: sec.scenarios.map((s) => ({{
-          label: `${{s.iteration_name}}  (peak ${{s.peak_cfs.toLocaleString(undefined, {{maximumFractionDigits: 0}})}} cfs)`,
-          data: s.flow_cfs,
-          borderColor: s.color,
-          backgroundColor: "transparent",
-          borderWidth: 1.8,
-          pointRadius: 0,
-          tension: 0.2,
-        }})),
-      }},
-      options: {{
-        responsive: true, maintainAspectRatio: false,
-        interaction: {{ mode: "nearest", intersect: false }},
-        plugins: {{
-          title: {{ display: true, text: `${{sec.frequency_yr}}-yr outfall flow vs. time` }},
-          legend: {{ position: "bottom", labels: {{ boxWidth: 14, font: {{ size: 11 }} }} }},
-          tooltip: {{ mode: "nearest", intersect: false }},
-        }},
-        scales: {{
-          x: {{ title: {{ display: true, text: "Time" }}, ticks: {{ maxTicksLimit: 16 }} }},
-          y: {{ title: {{ display: true, text: "Flow (cfs)" }}, beginAtZero: true }},
-        }},
-      }},
-    }});
+    const traces = sec.scenarios.map((s) => ({{
+      x: PAYLOAD.time_labels,
+      y: s.flow_cfs,
+      type: "scatter",
+      mode: "lines",
+      name: `${{s.iteration_name}}  (peak ${{s.peak_cfs.toLocaleString(undefined, {{maximumFractionDigits: 0}})}} cfs)`,
+      line: {{ color: s.color, width: 1.8, shape: "spline", smoothing: 0.5 }},
+      hovertemplate: `${{s.iteration_name}}<br>%{{x}}<br>%{{y:,.0f}} cfs<extra></extra>`,
+    }}));
+    Plotly.newPlot(`hydroChart-${{sec.frequency_yr}}`, traces, {{
+      title: {{ text: `${{sec.frequency_yr}}-yr outfall flow vs. time`, font: {{ size: 14 }} }},
+      margin: {{ l: 70, r: 20, t: 40, b: 110 }},
+      hovermode: "closest",
+      legend: {{ orientation: "h", x: 0.5, xanchor: "center", y: -0.22, font: {{ size: 11 }} }},
+      xaxis: {{ title: {{ text: "Time" }}, nticks: 16 }},
+      yaxis: {{ title: {{ text: "Flow (cfs)" }}, rangemode: "tozero" }},
+    }}, {{ responsive: true, displaylogo: false }});
 
     // Winner banner for this frequency
     let winner = sec.scenarios[0];

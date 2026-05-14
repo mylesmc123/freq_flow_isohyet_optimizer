@@ -252,7 +252,7 @@ def _render_html(title: str, payload_json: str, sections: list[dict]) -> str:
   <h2>{s['frequency_yr']}-yr</h2>
   <div class="banner" id="banner-{s['frequency_yr']}"></div>
   <h3>Outlet hydrographs</h3>
-  <div class="chart-wrap"><canvas id="chart-{s['frequency_yr']}"></canvas></div>
+  <div class="chart-wrap"><div id="chart-{s['frequency_yr']}" style="width:100%;height:100%;"></div></div>
   <h3>Storm spatial patterns</h3>
   <div class="map-row">
     <figure>
@@ -276,7 +276,7 @@ def _render_html(title: str, payload_json: str, sections: list[dict]) -> str:
 <title>{title}</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
 <style>
   :root {{ --accent:#144870; --rule:#d4dae2; --bg:#fafbfc; --text:#1f2937; }}
   * {{ box-sizing: border-box; }}
@@ -394,41 +394,33 @@ function buildLegend(cmap, title, ticks) {{
     // ---- Hydrograph chart ----
     const winnerLabel = `Winner — ${{sec.winner_iteration_name}} (peak ${{sec.winner_peak_cfs.toLocaleString(undefined, {{maximumFractionDigits:0}})}} cfs)`;
     const baselineLabel = `Baseline (Atlas-14-everywhere) — peak ${{sec.baseline_peak_cfs.toLocaleString(undefined, {{maximumFractionDigits:0}})}} cfs`;
-    new Chart(document.getElementById(`chart-${{sec.frequency_yr}}`), {{
-      type: "line",
-      data: {{
-        labels: sec.time_labels,
-        datasets: [
-          {{
-            label: baselineLabel,
-            data: sec.baseline_flow_cfs,
-            borderColor: "#3949ab",
-            backgroundColor: "transparent",
-            borderWidth: 2.0, pointRadius: 0, tension: 0.2,
-          }},
-          {{
-            label: winnerLabel,
-            data: sec.winner_flow_cfs,
-            borderColor: "#d81b60",
-            backgroundColor: "transparent",
-            borderWidth: 2.0, pointRadius: 0, tension: 0.2,
-          }},
-        ],
+    Plotly.newPlot(`chart-${{sec.frequency_yr}}`, [
+      {{
+        x: sec.time_labels,
+        y: sec.baseline_flow_cfs,
+        type: "scatter",
+        mode: "lines",
+        name: baselineLabel,
+        line: {{ color: "#3949ab", width: 2.0, shape: "spline", smoothing: 0.5 }},
+        hovertemplate: `Baseline<br>%{{x}}<br>%{{y:,.0f}} cfs<extra></extra>`,
       }},
-      options: {{
-        responsive:true, maintainAspectRatio:false,
-        interaction: {{ mode:"nearest", intersect:false }},
-        plugins: {{
-          title: {{ display:true, text: `${{sec.frequency_yr}}-yr outfall flow vs. time` }},
-          legend: {{ position:"bottom", labels:{{ boxWidth:14, font:{{size:11}} }} }},
-          tooltip: {{ mode:"nearest", intersect:false }},
-        }},
-        scales: {{
-          x: {{ title:{{display:true,text:"Time"}}, ticks:{{maxTicksLimit:14}} }},
-          y: {{ title:{{display:true,text:"Flow (cfs)"}}, beginAtZero:true }},
-        }},
+      {{
+        x: sec.time_labels,
+        y: sec.winner_flow_cfs,
+        type: "scatter",
+        mode: "lines",
+        name: winnerLabel,
+        line: {{ color: "#d81b60", width: 2.0, shape: "spline", smoothing: 0.5 }},
+        hovertemplate: `Winner<br>%{{x}}<br>%{{y:,.0f}} cfs<extra></extra>`,
       }},
-    }});
+    ], {{
+      title: {{ text: `${{sec.frequency_yr}}-yr outfall flow vs. time`, font: {{ size: 14 }} }},
+      margin: {{ l: 70, r: 20, t: 40, b: 90 }},
+      hovermode: "closest",
+      legend: {{ orientation: "h", x: 0.5, xanchor: "center", y: -0.22, font: {{ size: 11 }} }},
+      xaxis: {{ title: {{ text: "Time" }}, nticks: 14 }},
+      yaxis: {{ title: {{ text: "Flow (cfs)" }}, rangemode: "tozero" }},
+    }}, {{ responsive: true, displaylogo: false }});
 
     // ---- Banner ----
     const banner = document.getElementById(`banner-${{sec.frequency_yr}}`);
