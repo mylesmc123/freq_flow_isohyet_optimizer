@@ -32,8 +32,8 @@ from hms_runner import HMS_PROJECT_DIR, TARGET_ELEMENT, read_target_hydrograph
 
 
 def _baseline_run_name(frequency_yr: int) -> str:
-    """Name HMS used for the gridded-Atlas-14 baseline run, e.g. ``050yr_24hr``."""
-    return f"{frequency_yr:03d}yr_24hr"
+    """Name HMS used for the gridded-Atlas-14 baseline run, e.g. ``050yr``."""
+    return f"{frequency_yr:03d}yr"
 
 
 def _cmap_stops(
@@ -160,7 +160,7 @@ def build_comparison_html(
             print(f"  [warn] missing baseline DSS for {freq}-yr at {baseline_dss}; skipping")
             continue
         baseline_df = read_target_hydrograph(
-            baseline_dss, TARGET_ELEMENT, run_name=baseline_run
+            baseline_dss, TARGET_ELEMENT
         )
         baseline_flow = baseline_df["flow_cfs"]
 

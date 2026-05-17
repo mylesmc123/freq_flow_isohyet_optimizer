@@ -27,10 +27,14 @@ from pydsstools.heclib.dss.HecDss import Open
 # --- Project-specific defaults; overridable per call ------------------------
 HMS_CMD = Path(r"C:\Program Files\HEC\HEC-HMS\4.12\HEC-HMS.cmd")
 HMS_PROJECT_DIR = Path(
-    r"C:\Temp\I_57_Gage_Analysis_HMS4.12_AutoHyeto\I-57 Gage Analysis"
+    r"C:\Temp\I-57 Gage Analysis AutoHyeto"
 )
 HMS_PROJECT_NAME = "I_57_Gage_Analysis"
 HMS_HYETO_DSS = HMS_PROJECT_DIR / "data" / "hyeto.dss"
+
+
+# Watershed outlet element where peak flow is evaluated. HMS basin element name.
+TARGET_ELEMENT = "Black River at Pocahontas"
 
 # Sibling directories for project snapshots used by snapshot/restore. The
 # pristine backup is captured once at sweep start and reused as the source
@@ -46,16 +50,23 @@ HMS_FAILURE_BACKUP = HMS_PROJECT_DIR.with_name(HMS_PROJECT_DIR.name + "_lastfail
 # leave it in place on both ends.
 HMS_SNAPSHOT_SKIP_DIRS: set[str] = {"terrain"}
 
-
 def _safe_remove(path: Path) -> None:
-    """Best-effort deletion of a file or directory; swallows PermissionError."""
+    """Best-effort deletion of a file or directory; swallows PermissionError.
+
+    For directories that won't fully delete (Windows file-indexer / lingering
+    HMS handle), falls back to clearing as much of the contents as possible.
+    A locked dir handle usually still permits deletion of inner files, which
+    is enough for the subsequent merge-copy to land on a clean state.
+    """
     try:
         if path.is_file() or path.is_symlink():
             path.unlink()
         elif path.is_dir():
             shutil.rmtree(path)
     except PermissionError:
-        pass
+        if path.is_dir():
+            for child in path.iterdir():
+                _safe_remove(child)
 
 
 def snapshot_hms_project(
@@ -82,7 +93,7 @@ def snapshot_hms_project(
         if item.is_file():
             shutil.copy2(item, target)
         elif item.is_dir() and item.name not in HMS_SNAPSHOT_SKIP_DIRS:
-            shutil.copytree(item, target)
+            shutil.copytree(item, target, dirs_exist_ok=True)
 
 
 def restore_hms_project(
@@ -112,7 +123,7 @@ def restore_hms_project(
         if item.is_file():
             shutil.copy2(item, target)
         elif item.is_dir() and item.name not in HMS_SNAPSHOT_SKIP_DIRS:
-            shutil.copytree(item, target)
+            shutil.copytree(item, target, dirs_exist_ok=True)
 
 
 def ensure_pristine_backup(
@@ -245,7 +256,7 @@ def read_target_hydrograph(
     """Read a flow time series from an HMS results DSS file.
 
     Matches DSS pathnames part-by-part:
-        /A=*  /B=element_name  /C=parameter  /D=*  /E=interval?  /F~=run_name?/
+        /A=*  /B=element_name  /C=parameter  /D=*  /E=interval  /F=run_name/
     The D-part (date range) is intentionally wildcarded so we don't need to
     know HMS's simulation window. The A-part is also unconstrained.
 
@@ -253,10 +264,13 @@ def read_target_hydrograph(
         element_name: B-part — exact match against the HMS element name.
         parameter: C-part — exact match (case-insensitive). Default ``FLOW``.
         run_name: when provided, must appear as a substring of the F-part
-            (HMS writes ``RUN:<run_name>`` there).
+            (HMS writes ``RUN:<label>`` there — note that HMS's run *label*
+            often differs from the run *name* used for the DSS filename).
+            When None, the F-part is auto-resolved: if every matching record
+            shares one F-part, that one is used; if multiple distinct F-parts
+            are present, raises ValueError listing them so the caller can pick.
         interval: when provided, exact match against the E-part (e.g.
-            ``"1Hour"``). Useful when the same element has multiple-resolution
-            records.
+            ``"1Hour"``). When None, auto-resolved the same way as ``run_name``.
     """
     with Open(str(results_dss)) as dss:
         # getPathnameDict groups paths by record type (TS, RTS, ITS, ...).
@@ -287,9 +301,27 @@ def read_target_hydrograph(
             raise KeyError(
                 f"No DSS path matches B={element_name!r} C={parameter!r}"
                 f"{' E=' + interval if interval else ''}"
-                f"{' F~=' + run_name if run_name else ''}.\n"
+                f"{' F=' + run_name if run_name else ''}.\n"
                 f"First 10 paths in file:\n  {sample}"
             )
+        # When the caller leaves interval/run_name unset, the filter only
+        # works if every surviving candidate agrees on that part. If not,
+        # we'd silently stitch together unrelated series — raise instead
+        # and surface the distinct values so the caller can pass one in.
+        if interval is None:
+            distinct_e = sorted({p.split("/")[5] for p in candidates})
+            if len(distinct_e) > 1:
+                raise ValueError(
+                    f"Multiple E-parts (intervals) match B={element_name!r} "
+                    f"C={parameter!r}: {distinct_e}. Pass interval= to select one."
+                )
+        if run_name is None:
+            distinct_f = sorted({p.split("/")[6] for p in candidates})
+            if len(distinct_f) > 1:
+                raise ValueError(
+                    f"Multiple F-parts (runs) match B={element_name!r} "
+                    f"C={parameter!r}: {distinct_f}. Pass run_name= to select one."
+                )
         # Each remaining candidate is a separate monthly block of the same
         # logical series (only the D-part differs). Read them all and stitch.
         chunks: list[pd.DataFrame] = []
@@ -327,10 +359,6 @@ def hms_run_name(frequency_yr: int) -> str:
     return f"{frequency_yr:03d}yr_24hr_Hyeto"
 
 
-# Watershed outlet element where peak flow is evaluated. HMS basin element name.
-TARGET_ELEMENT = "Black River at Black Rock"
-
-
 if __name__ == "__main__":
     RUN_NAME = hms_run_name(100)
 
@@ -362,7 +390,7 @@ if __name__ == "__main__":
     if not results_dss.exists():
         raise SystemExit(f"Results DSS not found at {results_dss}")
 
-    df = read_target_hydrograph(results_dss, TARGET_ELEMENT, run_name=RUN_NAME)
+    df = read_target_hydrograph(results_dss, TARGET_ELEMENT)
     print(f"\nTarget hydrograph: {len(df)} timesteps")
     print(f"  Path:          {df['_path'].iloc[0]}")
     print(f"  Time range:    {df.index[0]} -> {df.index[-1]}")

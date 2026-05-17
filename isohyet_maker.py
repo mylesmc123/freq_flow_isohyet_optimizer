@@ -118,19 +118,26 @@ INPUT_DIR = PROJECT_DIR / "input"
 OUTPUT_DIR = PROJECT_DIR / "output"
 DAD_CSV = DATA_DIR / "hmr52_dad_24hr.csv"
 TEMPORAL_CSV = DATA_DIR / "HydroCad Rainfall Temporal Distribtions.csv"
+# Column Name in the TEMPORAL_CSV to use.
+TEMPORAL_DISTRIBUTION = "MSE5 24-hr (depth)"
 
 # Project tag — outputs are written to OUTPUT_DIR/PROJECT_NAME/ so that runs
 # for different basins/studies don't collide.
 PROJECT_NAME = "I57"
-SUBBASIN_SHP = INPUT_DIR / "I57" / "I-57_HMS_Subbasins.shp"
+SUBBASIN_SHP = INPUT_DIR / "I57" / "I-57_HMS_Subbasins_MayUpdate.shp"
 
 # Atlas 14 raster path per frequency.
 ATLAS14_RASTERS: dict[int, Path] = {
+    2: INPUT_DIR / "I57" / "I57_002yr24ha.asc",
+    5: INPUT_DIR / "I57" / "I57_005yr24ha.asc",
+    10: INPUT_DIR / "I57" / "I57_010yr24ha.asc",
+    25: INPUT_DIR / "I57" / "I57_025yr24ha.asc",
     50:  INPUT_DIR / "I57" / "I57_050yr24ha.asc",
     100: INPUT_DIR / "I57" / "I57_100yr24ha.asc",
     500: INPUT_DIR / "I57" / "I57_500yr24ha.asc",
 }
-FREQUENCIES_YR: list[int] = [50, 100, 500]
+# FREQUENCIES_YR: list[int] = [2, 5, 10, 25, 50, 100, 500]
+FREQUENCIES_YR: list[int] = [100]
 
 # Hyetograph start time — must overlap the HMS run's Control Specifications
 # time window. Set to match the gridded-precip control spec already used in
@@ -195,7 +202,7 @@ def run_scenario(
     output_dir: Path,
     dad_csv: Path = DAD_CSV,
     temporal_csv: Path = TEMPORAL_CSV,
-    distribution_name: str = "Type II 24-hr",
+    distribution_name: str = TEMPORAL_DISTRIBUTION,
     output_dt_minutes: float = 5.0,
     cell_size_m: float = 1000.0,
     name_col: str = "Name",
@@ -430,7 +437,7 @@ def run_full_scenario(
                     print(f"      {line}")
         try:
             target_df = read_target_hydrograph(
-                find_results_dss(run_name), TARGET_ELEMENT, run_name=run_name
+                find_results_dss(run_name), TARGET_ELEMENT
             )
             break
         except KeyError as e:
