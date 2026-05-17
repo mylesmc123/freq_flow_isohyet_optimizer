@@ -7,6 +7,8 @@
   ],
   "vmin": 6.88,
   "vmax": 9.486,
+  "data_min_in": 6.88,
+  "data_max_in": 9.486,
   "cmap": "viridis",
   "stops": [
     {
@@ -213,7 +215,5 @@
       "value": 9.486,
       "color": "#fde724"
     }
-  ],
-  "data_min_in": 6.88,
-  "data_max_in": 9.486
+  ]
 }
